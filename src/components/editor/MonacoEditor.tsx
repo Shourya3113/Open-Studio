@@ -104,11 +104,21 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({ bufferId }) => {
       return;
     }
 
-    const uri = monaco.Uri.parse(`file:///${buffer.filePath}`);
+    let uri: monaco.Uri;
+    try {
+      uri = monaco.Uri.file(buffer.filePath);
+    } catch {
+      uri = monaco.Uri.parse(`inmemory://workspace/${buffer.id}/${encodeURIComponent(buffer.fileName)}`);
+    }
+
     let model = monaco.editor.getModel(uri);
 
     if (!model) {
-      model = monaco.editor.createModel(buffer.content, buffer.language, uri);
+      try {
+        model = monaco.editor.createModel(buffer.content, buffer.language, uri);
+      } catch {
+        model = monaco.editor.createModel(buffer.content, buffer.language);
+      }
       modelsMapRef.current.set(buffer.id, model);
     } else {
       if (model.getValue() !== buffer.content && !buffer.isDirty) {
@@ -118,6 +128,7 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({ bufferId }) => {
     }
 
     editor.setModel(model);
+    editor.layout();
 
     // Sync content edits from Monaco to Zustand
     const contentListener = model.onDidChangeContent(() => {
@@ -132,14 +143,18 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({ bufferId }) => {
     };
   }, [bufferId, buffer?.filePath, buffer?.language]);
 
-  if (!buffer) {
-    return (
-      <div className="h-full w-full flex flex-col items-center justify-center text-ide-textMuted bg-ide-editor select-none">
-        <p className="text-sm">No open files</p>
-        <p className="text-xs text-ide-textMuted/70 mt-1">Open a file from the Explorer or press Ctrl+P</p>
-      </div>
-    );
-  }
-
-  return <div ref={containerRef} className="h-full w-full overflow-hidden" />;
+  return (
+    <div className="h-full w-full relative overflow-hidden bg-ide-editor">
+      <div 
+        ref={containerRef} 
+        className={`h-full w-full ${!buffer ? 'opacity-0 pointer-events-none' : ''}`} 
+      />
+      {!buffer && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-ide-textMuted bg-ide-editor select-none">
+          <p className="text-sm">No open files</p>
+          <p className="text-xs text-ide-textMuted/70 mt-1">Open a file from the Explorer or press Ctrl+P</p>
+        </div>
+      )}
+    </div>
+  );
 };
