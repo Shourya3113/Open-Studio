@@ -1,8 +1,10 @@
 pub mod client;
 pub mod queue;
+pub mod swapper;
 
 pub use client::{CompletionRequest, InferenceHealth, InferenceManager, ModelInfo};
 pub use queue::{InferencePriority, InferenceQueue};
+pub use swapper::{HardwareTier, HardwareTierInfo, ModelResidency, ModelSwapper};
 use tauri::State;
 
 #[tauri::command]
@@ -33,3 +35,35 @@ pub async fn abort_completion(
 ) -> Result<bool, String> {
     Ok(state.abort_completion(&request_id).await)
 }
+
+#[tauri::command]
+pub fn get_hardware_tier(
+    state: State<'_, InferenceManager>,
+) -> Result<HardwareTierInfo, String> {
+    Ok(state.get_hardware_tier())
+}
+
+#[tauri::command]
+pub async fn get_model_residency(
+    state: State<'_, InferenceManager>,
+) -> Result<Vec<ModelResidency>, String> {
+    Ok(state.get_model_residency().await)
+}
+
+#[tauri::command]
+pub async fn evict_model(
+    state: State<'_, InferenceManager>,
+    model: String,
+    endpoint: Option<String>,
+) -> Result<(), String> {
+    state.evict_model(&model, endpoint).await
+}
+
+#[tauri::command]
+pub async fn evict_idle_models(
+    state: State<'_, InferenceManager>,
+    endpoint: Option<String>,
+) -> Result<Vec<String>, String> {
+    Ok(state.evict_idle_models(endpoint).await)
+}
+

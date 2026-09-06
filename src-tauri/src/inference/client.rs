@@ -1,4 +1,5 @@
 use super::queue::{InferencePriority, InferenceQueue};
+use super::swapper::{HardwareTierInfo, ModelResidency, ModelSwapper};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -82,6 +83,7 @@ pub struct InferenceManager {
     pub default_endpoint: String,
     active_cancellations: Arc<Mutex<HashMap<String, oneshot::Sender<()>>>>,
     pub queue: Arc<InferenceQueue>,
+    pub swapper: Arc<ModelSwapper>,
 }
 
 impl Default for InferenceManager {
@@ -101,6 +103,7 @@ impl InferenceManager {
                 .unwrap_or_else(|| "http://localhost:11434".to_string()),
             active_cancellations: Arc::new(Mutex::new(HashMap::new())),
             queue: Arc::new(InferenceQueue::new()),
+            swapper: Arc::new(ModelSwapper::default()),
         }
     }
 
@@ -196,6 +199,14 @@ impl InferenceManager {
         let (sentinel_tx, mut sentinel_rx) = oneshot::channel();
         self.queue
             .set_active(request_id.clone(), priority, sentinel_tx)
+            .await;
+
+        self.swapper
+            .record_activity(&req.model, req.keep_alive.clone())
+            .await;
+        let _ = self
+            .swapper
+            .prepare_for_model(&endpoint, &self.client, &req.model)
             .await;
 
         let body = serde_json::json!({
@@ -315,6 +326,28 @@ impl InferenceManager {
                 }
             }
         }
+    }
+
+    pub fn get_hardware_tier(&self) -> HardwareTierInfo {
+        self.swapper.tier_info.clone()
+    }
+
+    pub async fn get_model_residency(&self) -> Vec<ModelResidency> {
+        self.swapper.get_residency().await
+    }
+
+    pub async fn evict_model(
+        &self,
+        model: &str,
+        endpoint_override: Option<String>,
+    ) -> Result<(), String> {
+        let endpoint = endpoint_override.unwrap_or_else(|| self.default_endpoint.clone());
+        self.swapper.evict_model(&endpoint, &self.client, model).await
+    }
+
+    pub async fn evict_idle_models(&self, endpoint_override: Option<String>) -> Vec<String> {
+        let endpoint = endpoint_override.unwrap_or_else(|| self.default_endpoint.clone());
+        self.swapper.evict_idle_models(&endpoint, &self.client).await
     }
 }
 

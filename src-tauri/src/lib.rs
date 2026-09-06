@@ -23,7 +23,11 @@ pub fn run() {
             terminal::close_terminal_session,
             inference::check_inference_health,
             inference::stream_completion,
-            inference::abort_completion
+            inference::abort_completion,
+            inference::get_hardware_tier,
+            inference::get_model_residency,
+            inference::evict_model,
+            inference::evict_idle_models
         ])
         .run(tauri::generate_context!())
         .expect("error while running Open Studio");

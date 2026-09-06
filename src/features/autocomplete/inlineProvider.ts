@@ -122,6 +122,7 @@ export function registerInlineCompletionProvider(
 
               currentAbortFn = abort;
             } catch {
+              currentAbortFn = null;
               resolve(undefined);
             }
           }

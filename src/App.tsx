@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { 
   Files, 
   Search, 
@@ -17,6 +17,8 @@ import { AppSystemInfo } from './types/system';
 import { InferenceHealth } from './types/inference';
 import { checkInferenceHealth, streamCompletion } from './services/inference';
 import { autocompleteTracker, AutocompleteMetrics } from './features/autocomplete/benchmark';
+import { getHardwareTier, HardwareTierInfo, formatTokenBudget } from './features/inference/hardwareTier';
+import { HardwareSentinelModal } from './components/inference/HardwareSentinelModal';
 import { EditorContainer } from './components/editor/EditorContainer';
 import { FileTree } from './components/sidebar/FileTree';
 import { TerminalPanel } from './components/terminal/TerminalPanel';
@@ -81,21 +83,55 @@ export default function App() {
   const [genStats, setGenStats] = useState<string | null>(null);
 
   const [autocompleteMetrics, setAutocompleteMetrics] = useState<AutocompleteMetrics | null>(null);
+  const [hardwareTier, setHardwareTier] = useState<HardwareTierInfo | null>(null);
+  const [isHardwareModalOpen, setIsHardwareModalOpen] = useState(false);
+  const [isReconnecting, setIsReconnecting] = useState(false);
 
   const { openFile, buffers, activeBufferId } = useEditorStore();
   const activeBuffer = activeBufferId ? buffers[activeBufferId] : null;
 
-  // Poll / check inference health and subscribe to autocomplete telemetry
-  useEffect(() => {
-    checkInferenceHealth().then((health) => {
+  const refreshInferenceTelemetry = useCallback(async () => {
+    try {
+      setIsReconnecting(true);
+      const [health, tier] = await Promise.all([
+        checkInferenceHealth(),
+        getHardwareTier(),
+      ]);
       setInferenceHealth(health);
+      setHardwareTier(tier);
       if (health.models.length > 0) {
-        setSelectedModel(health.models[0].name);
+        setSelectedModel((prev) => {
+          if (health.models.some((m) => m.name === prev)) return prev;
+          return health.models[0].name;
+        });
       }
-    }).catch(() => {});
-
-    return autocompleteTracker.subscribe(setAutocompleteMetrics);
+    } catch {
+      // Retain state
+    } finally {
+      setIsReconnecting(false);
+    }
   }, []);
+
+  // Poll / check inference health, fetch hardware tier, and subscribe to autocomplete telemetry
+  useEffect(() => {
+    refreshInferenceTelemetry();
+    const unsubAutocomplete = autocompleteTracker.subscribe(setAutocompleteMetrics);
+
+    // Auto-reconnect poll every 5s if offline
+    const reconnectTimer = setInterval(() => {
+      setInferenceHealth((curr) => {
+        if (!curr?.online) {
+          refreshInferenceTelemetry();
+        }
+        return curr;
+      });
+    }, 5000);
+
+    return () => {
+      unsubAutocomplete();
+      clearInterval(reconnectTimer);
+    };
+  }, [refreshInferenceTelemetry]);
 
   const handleGenerate = async () => {
     if (!chatPrompt.trim() || isGenerating) return;
@@ -480,16 +516,24 @@ export default function App() {
           )}
         </div>
         <div className="flex items-center gap-4">
-          <span 
-            onClick={() => { setActiveTab('chat'); setIsSidebarOpen(true); }}
-            className="flex items-center gap-1.5 cursor-pointer hover:underline" 
-            title={inferenceHealth?.online ? `Inference Gateway: Online (${inferenceHealth.models.length} local models)` : 'Inference Gateway: Offline'}
+          <button 
+            onClick={() => setIsHardwareModalOpen(true)}
+            className="flex items-center gap-1.5 cursor-pointer hover:bg-ide-hover px-1.5 py-0.5 rounded transition text-left" 
+            title={
+              inferenceHealth?.online 
+                ? `VRAM Sentinel: ${hardwareTier?.tier || 'Tier 3'} (${formatTokenBudget(hardwareTier?.context_budget || 8192)}). Click to manage VRAM & models.` 
+                : 'Ollama Offline. Click to view Sentinel diagnostics and start instructions.'
+            }
           >
-            <span className={`w-2 h-2 rounded-full ${inferenceHealth?.online ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`}></span>
-            <span className={inferenceHealth?.online ? 'text-emerald-400' : 'text-rose-400'}>
-              {inferenceHealth?.online ? `AI: ${selectedModel}` : 'AI: Offline'}
+            <span className={`w-2 h-2 rounded-full ${isReconnecting ? 'bg-amber-400 animate-spin' : inferenceHealth?.online ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`}></span>
+            <span className={isReconnecting ? 'text-amber-400' : inferenceHealth?.online ? 'text-emerald-400' : 'text-rose-400'}>
+              {isReconnecting 
+                ? '🟡 Reconnecting...' 
+                : inferenceHealth?.online 
+                  ? `AI: ${selectedModel} • Tier ${hardwareTier?.tier_number || 3} [${hardwareTier ? formatTokenBudget(hardwareTier.context_budget) : '8k'}]` 
+                  : '🔴 Ollama Offline'}
             </span>
-          </span>
+          </button>
           {autocompleteMetrics && (
             <span 
               onClick={async () => {
@@ -512,6 +556,16 @@ export default function App() {
           <span className="text-ide-textBright uppercase font-mono">{activeBuffer?.language || 'Plain Text'}</span>
         </div>
       </div>
+
+      {/* Hardware Sentinel & Model Swapper Modal */}
+      <HardwareSentinelModal
+        isOpen={isHardwareModalOpen}
+        onClose={() => setIsHardwareModalOpen(false)}
+        inferenceHealth={inferenceHealth}
+        selectedModel={selectedModel}
+        onSelectModel={setSelectedModel}
+        onRefreshHealth={refreshInferenceTelemetry}
+      />
     </div>
   );
 }
