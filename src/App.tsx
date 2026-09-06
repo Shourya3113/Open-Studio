@@ -13,6 +13,7 @@ import {
 import { AppSystemInfo } from './types/system';
 import { EditorContainer } from './components/editor/EditorContainer';
 import { FileTree } from './components/sidebar/FileTree';
+import { TerminalPanel } from './components/terminal/TerminalPanel';
 import { useEditorStore } from './stores/editorStore';
 
 const SAMPLE_WELCOME_TS = `// Open Studio: Local AI IDE & Agentic Workspace
@@ -222,25 +223,7 @@ export default function App() {
 
           {/* Bottom Panel */}
           {isBottomPanelOpen && (
-            <div className="h-44 bg-ide-panel border-t border-ide-border flex flex-col">
-              <div className="h-7 bg-ide-activityBar border-b border-ide-border flex items-center justify-between px-3 text-xs select-none">
-                <div className="flex items-center gap-3">
-                  <span className="font-semibold text-ide-textBright flex items-center gap-1.5">
-                    <Terminal size={13} />
-                    <span>TERMINAL</span>
-                  </span>
-                  <span className="text-ide-textMuted">OUTPUT</span>
-                </div>
-                <button onClick={() => setIsBottomPanelOpen(false)} className="text-ide-textMuted hover:text-ide-textBright">
-                  ✕
-                </button>
-              </div>
-              <div className="flex-1 p-2 font-mono text-xs text-emerald-400 bg-ide-bg overflow-y-auto">
-                <p>Open Studio Shell [Monaco Editor Core Online]</p>
-                <p className="text-ide-textMuted">Ready for Day 4 portable-pty native terminal integration.</p>
-                <p className="text-ide-textBright mt-2">&gt; _</p>
-              </div>
-            </div>
+            <TerminalPanel onClose={() => setIsBottomPanelOpen(false)} />
           )}
         </div>
       </div>
