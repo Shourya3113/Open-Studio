@@ -9,7 +9,7 @@ describe('Week 1 Workspace Integration Test', () => {
       activeBufferId: null,
       openBufferIds: [],
       splitDirection: 'none',
-      secondaryBufferId: null,
+      splitActiveBufferId: null,
     });
   });
 
