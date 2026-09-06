@@ -1,6 +1,8 @@
 pub mod client;
+pub mod queue;
 
 pub use client::{CompletionRequest, InferenceHealth, InferenceManager, ModelInfo};
+pub use queue::{InferencePriority, InferenceQueue};
 use tauri::State;
 
 #[tauri::command]

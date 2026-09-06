@@ -1,3 +1,4 @@
+use super::queue::{InferencePriority, InferenceQueue};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -14,6 +15,7 @@ pub struct CompletionRequest {
     #[serde(default)]
     pub stop_tokens: Vec<String>,
     pub keep_alive: Option<String>,
+    pub priority: Option<InferencePriority>,
 }
 
 fn default_temperature() -> f32 {
@@ -79,6 +81,7 @@ pub struct InferenceManager {
     client: reqwest::Client,
     pub default_endpoint: String,
     active_cancellations: Arc<Mutex<HashMap<String, oneshot::Sender<()>>>>,
+    pub queue: Arc<InferenceQueue>,
 }
 
 impl Default for InferenceManager {
@@ -97,6 +100,7 @@ impl InferenceManager {
             default_endpoint: default_endpoint
                 .unwrap_or_else(|| "http://localhost:11434".to_string()),
             active_cancellations: Arc::new(Mutex::new(HashMap::new())),
+            queue: Arc::new(InferenceQueue::new()),
         }
     }
 
@@ -158,6 +162,7 @@ impl InferenceManager {
     }
 
     pub async fn abort_completion(&self, request_id: &str) -> bool {
+        self.queue.clear_active(request_id).await;
         let mut map = self.active_cancellations.lock().await;
         if let Some(tx) = map.remove(request_id) {
             let _ = tx.send(());
@@ -168,6 +173,7 @@ impl InferenceManager {
     }
 
     pub async fn unregister_cancellation(&self, request_id: &str) {
+        self.queue.clear_active(request_id).await;
         let mut map = self.active_cancellations.lock().await;
         map.remove(request_id);
     }
@@ -182,7 +188,15 @@ impl InferenceManager {
         let endpoint = endpoint_override.unwrap_or_else(|| self.default_endpoint.clone());
         let url = format!("{}/api/generate", endpoint.trim_end_matches('/'));
 
+        let priority = req.priority.unwrap_or(InferencePriority::Chat);
+        self.queue.enqueue(request_id.clone(), priority).await;
+
         let mut cancel_rx = self.register_cancellation(&request_id).await;
+
+        let (sentinel_tx, mut sentinel_rx) = oneshot::channel();
+        self.queue
+            .set_active(request_id.clone(), priority, sentinel_tx)
+            .await;
 
         let body = serde_json::json!({
             "model": req.model,
@@ -215,6 +229,20 @@ impl InferenceManager {
             tokio::select! {
                 _ = &mut cancel_rx => {
                     // Preempted / aborted by user or higher priority request
+                    let _ = window.emit(
+                        &format!("llm-done:{}", request_id),
+                        LlmDoneEvent {
+                            request_id: request_id.clone(),
+                            total_duration: None,
+                            eval_count: None,
+                            eval_duration: None,
+                        }
+                    );
+                    self.unregister_cancellation(&request_id).await;
+                    return Ok(());
+                }
+                _ = &mut sentinel_rx => {
+                    // Preempted by incoming higher-priority task (e.g. Autocomplete)
                     let _ = window.emit(
                         &format!("llm-done:{}", request_id),
                         LlmDoneEvent {

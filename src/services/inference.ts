@@ -99,7 +99,10 @@ export async function streamCompletion(
 
     await invoke('stream_completion', {
       requestId,
-      req,
+      req: {
+        ...req,
+        priority: req.priority || 'chat',
+      },
       endpoint,
     });
 

@@ -59,4 +59,23 @@ describe('Inference Service', () => {
     expect(onDone).not.toHaveBeenCalled();
     expect(tokens.length).toBeLessThan(8);
   });
+
+  it('supports specifying inference priority levels', async () => {
+    const tokens: string[] = [];
+    await new Promise<void>(async (resolve) => {
+      await streamCompletion(
+        {
+          model: 'qwen2.5-coder:1.5b',
+          prompt: 'test autocomplete priority',
+          priority: 'autocomplete',
+        },
+        (token) => {
+          tokens.push(token);
+        },
+        () => resolve()
+      );
+    });
+
+    expect(tokens.length).toBeGreaterThan(0);
+  });
 });

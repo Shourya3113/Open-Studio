@@ -11,12 +11,15 @@ export interface InferenceHealth {
   error?: string;
 }
 
+export type InferencePriority = 'abort' | 'autocomplete' | 'chat' | 'background';
+
 export interface CompletionRequest {
   model: string;
   prompt: string;
   temperature?: number;
   stop_tokens?: string[];
   keep_alive?: string;
+  priority?: InferencePriority;
 }
 
 export interface LlmTokenPayload {
