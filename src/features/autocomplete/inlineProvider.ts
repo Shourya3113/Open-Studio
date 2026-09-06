@@ -7,6 +7,7 @@ import {
   cleanPrediction
 } from './fim';
 import { streamCompletion } from '../../services/inference';
+import { autocompleteTracker } from './benchmark';
 
 export { DEBOUNCE_MS, cleanPrediction };
 
@@ -72,6 +73,7 @@ export function registerInlineCompletionProvider(
             });
 
             try {
+              const requestStart = performance.now();
               const abort = await streamCompletion(
                 {
                   model: 'qwen2.5-coder:1.5b',
@@ -93,6 +95,9 @@ export function registerInlineCompletionProvider(
                 },
                 () => {
                   currentAbortFn = null;
+                  const durationMs = Math.round(performance.now() - requestStart);
+                  autocompleteTracker.recordLatency(durationMs);
+
                   const cleaned = cleanPrediction(prediction);
                   if (!cleaned) {
                     resolve(undefined);

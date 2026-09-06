@@ -16,6 +16,7 @@ import {
 import { AppSystemInfo } from './types/system';
 import { InferenceHealth } from './types/inference';
 import { checkInferenceHealth, streamCompletion } from './services/inference';
+import { autocompleteTracker, AutocompleteMetrics } from './features/autocomplete/benchmark';
 import { EditorContainer } from './components/editor/EditorContainer';
 import { FileTree } from './components/sidebar/FileTree';
 import { TerminalPanel } from './components/terminal/TerminalPanel';
@@ -79,10 +80,12 @@ export default function App() {
   const [abortFn, setAbortFn] = useState<(() => void) | null>(null);
   const [genStats, setGenStats] = useState<string | null>(null);
 
+  const [autocompleteMetrics, setAutocompleteMetrics] = useState<AutocompleteMetrics | null>(null);
+
   const { openFile, buffers, activeBufferId } = useEditorStore();
   const activeBuffer = activeBufferId ? buffers[activeBufferId] : null;
 
-  // Poll / check inference health on mount
+  // Poll / check inference health and subscribe to autocomplete telemetry
   useEffect(() => {
     checkInferenceHealth().then((health) => {
       setInferenceHealth(health);
@@ -90,6 +93,8 @@ export default function App() {
         setSelectedModel(health.models[0].name);
       }
     }).catch(() => {});
+
+    return autocompleteTracker.subscribe(setAutocompleteMetrics);
   }, []);
 
   const handleGenerate = async () => {
@@ -485,6 +490,19 @@ export default function App() {
               {inferenceHealth?.online ? `AI: ${selectedModel}` : 'AI: Offline'}
             </span>
           </span>
+          {autocompleteMetrics && (
+            <span 
+              onClick={async () => {
+                await autocompleteTracker.runBenchmarkBurst(5);
+              }}
+              className="flex items-center gap-1 cursor-pointer hover:text-ide-textBright transition bg-ide-hover/60 px-1.5 py-0.5 rounded text-[10px]"
+              title={`Inline Autocomplete Telemetry: ${autocompleteMetrics.avgLatencyMs}ms average (${autocompleteMetrics.acceptanceRate}% acceptance, ${autocompleteMetrics.acceptedCount} accepted). Click to run benchmark burst.`}
+            >
+              <Zap size={11} className="text-amber-400" />
+              <span className="text-ide-textBright font-mono">{autocompleteMetrics.avgLatencyMs}ms</span>
+              <span className="text-ide-textMuted font-mono">({autocompleteMetrics.acceptanceRate}%)</span>
+            </span>
+          )}
           {activeBuffer?.cursorPosition && (
             <span>
               Ln {activeBuffer.cursorPosition.line}, Col {activeBuffer.cursorPosition.column}
