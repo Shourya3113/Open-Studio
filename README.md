@@ -110,6 +110,9 @@ Open Studio is committed to absolute developer privacy:
 
 ---
 
-## 📄 License
+## 📄 License & Open Core Architecture
 
-Licensed under the [Apache 2.0 License](./LICENSE) or Commercial Open Source Software (COSS) Community License.
+Open Studio is licensed under an **Open Core (COSS)** model:
+- **Core Edition (Desktop IDE & Local Engine)**: 100% Free & Open Source under the **[Apache License 2.0](./LICENSE)**.
+- **Enterprise Edition (`ee/`)**: Commercial software for regulated team management, SSO/SCIM, and centralized fleet control under the **[Open Studio Commercial License](./ee/LICENSE)**.
+
