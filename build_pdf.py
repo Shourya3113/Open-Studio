@@ -159,7 +159,7 @@ def create_blueprint_pdf(output_filename="Open_Studio_Daily_Execution_Plan.pdf")
     meta_data = [
         [
             Paragraph("<b>Target Stack:</b> Tauri v2 (Rust) + React 18 (TS) + Monaco", meta_style),
-            Paragraph("<b>Hardware Baseline:</b> i7-1355U • 16GB RAM • RTX 3050 (4GB) & Apple M-Series", meta_style),
+            Paragraph("<b>Hardware Acceleration:</b> Universal (NVIDIA CUDA, AMD ROCm, Apple Metal, Intel Arc & CPU)", meta_style),
         ],
         [
             Paragraph("<b>Inference:</b> Ollama (SSE) + llama.cpp + MLX", meta_style),
@@ -378,11 +378,11 @@ def create_blueprint_pdf(output_filename="Open_Studio_Daily_Execution_Plan.pdf")
                 },
                 {
                     "day": 17,
-                    "title": "Hardware Profiler & Dynamic VRAM Sentinel",
-                    "goal": "Build real-time GPU/RAM hardware monitor preventing OOM crashes by dynamically budgeting context windows.",
-                    "deliverables": "src-tauri/src/hardware/profiler.rs (NVML / Apple sysctl / Windows DXGI), VRAM budget sentinel status bar widget.",
-                    "contract": "get_hardware_profile() -> HardwareProfile; clamps num_ctx to 8192 with Q8_0 KV cache if VRAM < 4.5GB.",
-                    "prompt": "Build Hardware Profiler detecting GPU & free VRAM. Calculate safe num_ctx budgets. Create React status bar widget showing VRAM allocation.",
+                    "title": "Hardware Profiler & Universal Memory Sentinel",
+                    "goal": "Build real-time hardware monitor detecting NVIDIA CUDA, AMD ROCm, Apple Metal, Intel Arc, and CPU fallback to prevent OOM.",
+                    "deliverables": "src-tauri/src/hardware/profiler.rs (multi-vendor detection), VRAM budget sentinel status bar widget.",
+                    "contract": "get_hardware_profile() -> HardwareProfile; classifies into Tier 1-4 and clamps context budgets dynamically.",
+                    "prompt": "Build Universal Hardware Profiler in Rust. Detect compute vendor (NVIDIA, AMD, Apple, Intel, CPU) and allocate safe context budgets across 4 tiers.",
                     "test": "cd src-tauri && cargo test hardware::profiler"
                 },
                 {

@@ -116,7 +116,7 @@
   ```
 - **Step-by-Step Implementation Sequence**:
   1. Install `@monaco-editor/react` and `monaco-editor`. Configure Vite to bundle Monaco workers locally without external CDN requests.
-  2. Register custom theme matching VS Code / Cursor dark styles (`#1e1e1e` background, `#007acc` accents).
+  2. Register custom theme matching professional dark IDE styles (`#1e1e1e` background, `#007acc` accents).
   3. Implement `EditorStore` with actions: `openFile()`, `closeFile()`, `updateContent()`, `setActiveTab()`.
   4. Create `TabBar` component with modified dot indicators and close buttons.
   5. Add split editor view support using CSS grid/flex with draggable split handles.
@@ -692,39 +692,45 @@
 
 ---
 
-### Day 17: Hardware Profiler & Dynamic VRAM Sentinel
+### Day 17: Hardware Profiler & Universal Memory Sentinel
 
-- **Objective**: Build a real-time GPU/RAM hardware monitor that dynamically calculates VRAM headroom and clamps context windows to prevent Out-Of-Memory (OOM) crashes.
+- **Objective**: Build a real-time multi-vendor hardware monitor that detects compute acceleration across NVIDIA (CUDA), AMD (ROCm/Vulkan), Apple Silicon (Metal), Intel Arc (SYCL/DXGI), and CPU fallback, dynamically clamping context windows to prevent Out-Of-Memory (OOM) crashes.
 - **Deliverables**:
-  - `src-tauri/src/hardware/profiler.rs` detecting GPU vendor, total VRAM, and free VRAM (via NVML on NVIDIA, sysctl on Apple Silicon, DXGI on Windows).
-  - VRAM budget calculation engine adjusting `num_ctx` and KV cache quantization (`Q8_0` / `Q4_0`).
-  - Status bar hardware indicator widget (e.g. `🟢 4.0GB / 8.0GB VRAM`).
+  - `src-tauri/src/hardware/profiler.rs` detecting GPU vendor, compute backend, total VRAM, and free VRAM.
+  - Multi-tiered VRAM budget calculation engine adjusting `num_ctx` and KV cache quantization (`Q8_0` / `Q4_0`).
+  - Status bar hardware indicator widget (e.g. `🟢 4.0GB / 8.0GB VRAM [CUDA]` or `⚡ 16GB Unified [Metal]`).
 - **Interface & Schema Contracts**:
   ```rust
   // src-tauri/src/hardware/types.rs
   #[derive(serde::Serialize, serde::Deserialize, Clone)]
   pub struct HardwareProfile {
       pub gpu_name: String,
+      pub backend: String, // "CUDA" | "Metal" | "ROCm" | "Vulkan" | "SYCL" | "CPU"
       pub total_vram_mb: u64,
       pub free_vram_mb: u64,
-      pub is_apple_silicon: bool,
-      pub recommended_tier: String,
+      pub is_unified_memory: bool,
+      pub recommended_tier: String, // "Tier1_Heavyweight" | "Tier2_Standard" | "Tier3_Constrained" | "Tier4_CPU"
   }
 
   #[tauri::command]
   pub fn get_hardware_profile() -> Result<HardwareProfile, String>;
   ```
 - **Step-by-Step Implementation Sequence**:
-  1. Query system GPU metrics via OS-specific APIs.
-  2. Compute safety guardrails: if VRAM < 4.5GB, force max context window to 8,192 tokens with Q8 KV cache.
+  1. Query system GPU metrics via OS/vendor APIs: NVML/DXGI on Windows, Metal/sysctl on macOS, ROCm/Vulkan on Linux.
+  2. Compute safety guardrails:
+     - Tier 1 (≥12GB / Apple ≥24GB): 32k context, concurrent models.
+     - Tier 2 (6GB–11GB / Apple 16GB): 16k context, resident 7B.
+     - Tier 3 (4GB discrete): clamp `num_ctx` to 8,192 with Q8 KV cache, hot-swapping 7B on-demand.
+     - Tier 4 (CPU / integrated): 1.5B on CPU AVX2, optional cloud BYOK.
   3. Emit VRAM usage updates every 3 seconds to the status bar widget.
   4. Trigger graceful degradation alerts if free VRAM drops below 500MB.
 - **Antigravity Agent Prompt**:
   ```text
-  Implement the Hardware Profiler & VRAM Sentinel in Rust (src-tauri/src/hardware/profiler.rs).
-  Detect GPU model, total VRAM, and available memory across Windows (DXGI/NVML) and macOS (Metal/sysctl).
-  Calculate safe context budgets (num_ctx) to prevent OOM errors on 4GB-8GB GPUs.
-  Create a React status bar component showing real-time VRAM allocation and active tier badges.
+  Implement the Universal Hardware Profiler & Memory Sentinel in Rust (src-tauri/src/hardware/profiler.rs).
+  Detect compute vendor (NVIDIA CUDA, AMD ROCm/Vulkan, Apple Metal, Intel Arc, or CPU) and available memory.
+  Classify workstation into Tier 1 (Heavyweight), Tier 2 (Standard), Tier 3 (Constrained 4GB), or Tier 4 (CPU).
+  Calculate safe context budgets (num_ctx) to guarantee zero OOM crashes.
+  Create a React status bar component showing real-time memory allocation, backend badge, and active tier.
   ```
 - **Verification & Test Commands**:
   ```powershell
