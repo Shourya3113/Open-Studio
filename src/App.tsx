@@ -6,15 +6,13 @@ import {
   GitBranch, 
   Terminal, 
   Settings, 
-  Cpu, 
-  Layers, 
   ChevronRight, 
-  ChevronDown, 
   Code2, 
   Zap
 } from 'lucide-react';
 import { AppSystemInfo } from './types/system';
 import { EditorContainer } from './components/editor/EditorContainer';
+import { FileTree } from './components/sidebar/FileTree';
 import { useEditorStore } from './stores/editorStore';
 
 const SAMPLE_WELCOME_TS = `// Open Studio: Local AI IDE & Agentic Workspace
@@ -176,38 +174,8 @@ export default function App() {
               </button>
             </div>
 
-            <div className="flex-1 p-3 text-xs overflow-y-auto">
-              {activeTab === 'files' && (
-                <div>
-                  <div className="flex items-center gap-1 font-semibold text-ide-textBright mb-2">
-                    <ChevronDown size={14} />
-                    <span>OPEN-STUDIO (WORKSPACE)</span>
-                  </div>
-                  <div className="pl-4 space-y-1 text-ide-textNormal">
-                    <div 
-                      onClick={() => openFile('src/welcome.ts', SAMPLE_WELCOME_TS, 'typescript')}
-                      className="flex items-center gap-2 py-1 px-1.5 rounded hover:bg-ide-hover cursor-pointer"
-                    >
-                      <Code2 size={14} className="text-blue-400" />
-                      <span>welcome.ts</span>
-                    </div>
-                    <div 
-                      onClick={() => openFile('README.md', SAMPLE_README_MD, 'markdown')}
-                      className="flex items-center gap-2 py-1 px-1.5 rounded hover:bg-ide-hover cursor-pointer"
-                    >
-                      <Layers size={14} className="text-teal-400" />
-                      <span>README.md</span>
-                    </div>
-                    <div 
-                      onClick={() => openFile('src-tauri/src/main.rs', SAMPLE_MAIN_RS, 'rust')}
-                      className="flex items-center gap-2 py-1 px-1.5 rounded hover:bg-ide-hover cursor-pointer"
-                    >
-                      <Cpu size={14} className="text-orange-400" />
-                      <span>main.rs</span>
-                    </div>
-                  </div>
-                </div>
-              )}
+            <div className="flex-1 overflow-hidden">
+              {activeTab === 'files' && <FileTree />}
 
               {activeTab === 'chat' && (
                 <div className="flex flex-col h-full justify-between">
