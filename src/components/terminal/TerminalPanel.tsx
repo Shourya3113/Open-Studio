@@ -13,6 +13,7 @@ import {
 
 interface TerminalPanelProps {
   onClose?: () => void;
+  height?: number;
 }
 
 interface TabSession {
@@ -20,7 +21,7 @@ interface TabSession {
   name: string;
 }
 
-export const TerminalPanel: React.FC<TerminalPanelProps> = ({ onClose }) => {
+export const TerminalPanel: React.FC<TerminalPanelProps> = ({ onClose, height = 220 }) => {
   const [sessions, setSessions] = useState<TabSession[]>([
     { id: 'term_1', name: '1: shell' }
   ]);
@@ -224,7 +225,10 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ onClose }) => {
   };
 
   return (
-    <div className={`flex flex-col bg-ide-panel border-t border-ide-border select-none ${isMaximized ? 'fixed inset-x-0 bottom-0 h-[80vh] z-50 shadow-2xl' : 'h-52'}`}>
+    <div 
+      style={isMaximized ? undefined : { height: `${height}px` }}
+      className={`flex flex-col bg-ide-panel border-t border-ide-border select-none ${isMaximized ? 'fixed inset-x-0 bottom-0 h-[80vh] z-50 shadow-2xl' : ''}`}
+    >
       {/* Terminal Tab Header */}
       <div className="h-7 bg-ide-activityBar border-b border-ide-border flex items-center justify-between px-2 text-xs">
         {/* Left: Terminal Tabs */}

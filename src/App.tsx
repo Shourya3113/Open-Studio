@@ -63,9 +63,68 @@ export default function App() {
   const [systemInfo, setSystemInfo] = useState<AppSystemInfo | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isBottomPanelOpen, setIsBottomPanelOpen] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(260);
+  const [bottomPanelHeight, setBottomPanelHeight] = useState(220);
 
   const { openFile, buffers, activeBufferId } = useEditorStore();
   const activeBuffer = activeBufferId ? buffers[activeBufferId] : null;
+
+  // Global IDE shortcuts: Ctrl+` (Terminal), Ctrl+B (Sidebar)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === '`') {
+        e.preventDefault();
+        setIsBottomPanelOpen(prev => !prev);
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setIsSidebarOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Sidebar drag resizer handler
+  const handleSidebarMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const newWidth = Math.max(180, Math.min(600, startWidth + deltaX));
+      setSidebarWidth(newWidth);
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
+  // Bottom panel drag resizer handler
+  const handleBottomMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startHeight = bottomPanelHeight;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const deltaY = startY - moveEvent.clientY;
+      const newHeight = Math.max(120, Math.min(600, startHeight + deltaY));
+      setBottomPanelHeight(newHeight);
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
 
   useEffect(() => {
     // Seed initial files into editor store
@@ -167,54 +226,66 @@ export default function App() {
 
         {/* Primary Sidebar */}
         {isSidebarOpen && (
-          <div className="w-64 bg-ide-sidebar border-r border-ide-border flex flex-col select-none">
-            <div className="h-9 px-3 flex items-center justify-between border-b border-ide-border text-xs font-semibold uppercase tracking-wider text-ide-textMuted">
-              <span>{activeTab === 'files' ? 'Explorer' : activeTab === 'chat' ? 'Local AI' : activeTab === 'search' ? 'Search' : activeTab === 'git' ? 'Shadow Git' : 'Settings'}</span>
-              <button onClick={() => setIsSidebarOpen(false)} className="text-ide-textMuted hover:text-ide-textBright">
-                <ChevronRight size={15} />
-              </button>
+          <>
+            <div 
+              style={{ width: `${sidebarWidth}px` }} 
+              className="bg-ide-sidebar border-r border-ide-border flex flex-col select-none flex-shrink-0"
+            >
+              <div className="h-9 px-3 flex items-center justify-between border-b border-ide-border text-xs font-semibold uppercase tracking-wider text-ide-textMuted">
+                <span>{activeTab === 'files' ? 'Explorer' : activeTab === 'chat' ? 'Local AI' : activeTab === 'search' ? 'Search' : activeTab === 'git' ? 'Shadow Git' : 'Settings'}</span>
+                <button onClick={() => setIsSidebarOpen(false)} className="text-ide-textMuted hover:text-ide-textBright">
+                  <ChevronRight size={15} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-hidden">
+                {activeTab === 'files' && <FileTree />}
+
+                {activeTab === 'chat' && (
+                  <div className="flex flex-col h-full justify-between p-3">
+                    <div className="text-center py-6 text-ide-textMuted">
+                      <Bot size={36} className="mx-auto mb-2 text-ide-accent opacity-80" />
+                      <p className="font-semibold text-ide-textBright">Local AI Assistant</p>
+                      <p className="text-[11px] mt-1">Ready for Week 3 Chat & @file integration</p>
+                    </div>
+                    <div className="bg-ide-bg border border-ide-border p-2 rounded text-xs text-ide-textMuted">
+                      Type <code className="text-blue-400 font-mono">@file</code> to inject context.
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'settings' && (
+                  <div className="p-3 space-y-3">
+                    <div>
+                      <label className="text-ide-textMuted block mb-1">Ollama Endpoint</label>
+                      <input 
+                        type="text" 
+                        readOnly 
+                        value="http://localhost:11434" 
+                        className="w-full bg-ide-bg border border-ide-border rounded px-2 py-1 text-xs text-ide-textBright" 
+                      />
+                    </div>
+                    <div>
+                      <label className="text-ide-textMuted block mb-1">Editor Theme</label>
+                      <input 
+                        type="text" 
+                        readOnly 
+                        value="open-studio-dark" 
+                        className="w-full bg-ide-bg border border-ide-border rounded px-2 py-1 text-xs text-ide-textBright" 
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
-            <div className="flex-1 overflow-hidden">
-              {activeTab === 'files' && <FileTree />}
-
-              {activeTab === 'chat' && (
-                <div className="flex flex-col h-full justify-between">
-                  <div className="text-center py-6 text-ide-textMuted">
-                    <Bot size={36} className="mx-auto mb-2 text-ide-accent opacity-80" />
-                    <p className="font-semibold text-ide-textBright">Local AI Assistant</p>
-                    <p className="text-[11px] mt-1">Ready for Week 3 Chat & @file integration</p>
-                  </div>
-                  <div className="bg-ide-bg border border-ide-border p-2 rounded text-xs text-ide-textMuted">
-                    Type <code className="text-blue-400 font-mono">@file</code> to inject context.
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'settings' && (
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-ide-textMuted block mb-1">Ollama Endpoint</label>
-                    <input 
-                      type="text" 
-                      readOnly 
-                      value="http://localhost:11434" 
-                      className="w-full bg-ide-bg border border-ide-border rounded px-2 py-1 text-xs text-ide-textBright" 
-                    />
-                  </div>
-                  <div>
-                    <label className="text-ide-textMuted block mb-1">Editor Theme</label>
-                    <input 
-                      type="text" 
-                      readOnly 
-                      value="open-studio-dark" 
-                      className="w-full bg-ide-bg border border-ide-border rounded px-2 py-1 text-xs text-ide-textBright" 
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+            {/* Vertical Resizer Handle */}
+            <div 
+              onMouseDown={handleSidebarMouseDown}
+              className="w-1 bg-transparent hover:bg-ide-accent cursor-col-resize z-20 transition-colors"
+              title="Drag to resize sidebar"
+            />
+          </>
         )}
 
         {/* Editor Area & Bottom Panel */}
@@ -223,7 +294,18 @@ export default function App() {
 
           {/* Bottom Panel */}
           {isBottomPanelOpen && (
-            <TerminalPanel onClose={() => setIsBottomPanelOpen(false)} />
+            <>
+              {/* Horizontal Resizer Handle */}
+              <div 
+                onMouseDown={handleBottomMouseDown}
+                className="h-1 bg-transparent hover:bg-ide-accent cursor-row-resize z-20 transition-colors"
+                title="Drag to resize terminal panel"
+              />
+              <TerminalPanel 
+                height={bottomPanelHeight} 
+                onClose={() => setIsBottomPanelOpen(false)} 
+              />
+            </>
           )}
         </div>
       </div>
@@ -235,6 +317,14 @@ export default function App() {
             <GitBranch size={12} />
             <span>main</span>
           </span>
+          <button 
+            onClick={() => setIsBottomPanelOpen(prev => !prev)}
+            className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded transition ${isBottomPanelOpen ? 'text-ide-accent bg-ide-hover' : 'hover:text-ide-textBright'}`}
+            title="Toggle Terminal (Ctrl+`)"
+          >
+            <Terminal size={12} />
+            <span>Terminal</span>
+          </button>
           {activeBuffer && activeBuffer.isDirty && (
             <span className="text-amber-400">● Unsaved Changes (Ctrl+S to save)</span>
           )}
