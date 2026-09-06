@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import * as monaco from 'monaco-editor';
 import './monacoWorkers';
 import { registerOpenStudioTheme, THEME_NAME } from './monacoTheme';
+import { registerInlineCompletionProvider } from '../../features/autocomplete/inlineProvider';
 import { useEditorStore } from '../../stores/editorStore';
 
 interface MonacoEditorProps {
@@ -24,7 +25,7 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({ bufferId }) => {
 
   const buffer = bufferId ? buffers[bufferId] : null;
 
-  // Initialize Theme and Editor instance once
+  // Initialize Theme, Inline Completions, and Editor instance once
   useEffect(() => {
     registerOpenStudioTheme();
 
@@ -45,9 +46,18 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({ bufferId }) => {
       cursorSmoothCaretAnimation: 'on',
       padding: { top: 8, bottom: 8 },
       tabSize: 2,
+      inlineSuggest: {
+        enabled: true,
+        mode: 'prefix',
+      },
+      suggestOnTriggerCharacters: true,
+      tabCompletion: 'on',
     });
 
     editorRef.current = editor;
+
+    // Register Qwen 2.5 Coder resident inline autocomplete provider
+    const inlineDisposables = registerInlineCompletionProvider();
 
     // Register IDE Keyboard Shortcuts directly in Monaco
     // Ctrl+S: Save File
@@ -87,6 +97,7 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({ bufferId }) => {
     resizeObserver.observe(containerRef.current);
 
     return () => {
+      inlineDisposables.forEach((d) => d.dispose());
       cursorListener.dispose();
       resizeObserver.disconnect();
       editor.dispose();
