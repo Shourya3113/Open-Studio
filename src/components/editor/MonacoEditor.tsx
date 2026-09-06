@@ -1,0 +1,145 @@
+import React, { useEffect, useRef } from 'react';
+import * as monaco from 'monaco-editor';
+import './monacoWorkers';
+import { registerOpenStudioTheme, THEME_NAME } from './monacoTheme';
+import { useEditorStore } from '../../stores/editorStore';
+
+interface MonacoEditorProps {
+  bufferId: string | null;
+}
+
+export const MonacoEditor: React.FC<MonacoEditorProps> = ({ bufferId }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const modelsMapRef = useRef<Map<string, monaco.editor.ITextModel>>(new Map());
+
+  const { 
+    buffers, 
+    updateContent, 
+    updateCursor, 
+    saveFile, 
+    closeFile,
+    setSplitDirection 
+  } = useEditorStore();
+
+  const buffer = bufferId ? buffers[bufferId] : null;
+
+  // Initialize Theme and Editor instance once
+  useEffect(() => {
+    registerOpenStudioTheme();
+
+    if (!containerRef.current) return;
+
+    const editor = monaco.editor.create(containerRef.current, {
+      theme: THEME_NAME,
+      automaticLayout: true,
+      fontSize: 13,
+      fontFamily: "'Cascadia Code', 'Fira Code', Consolas, 'Courier New', monospace",
+      fontLigatures: true,
+      lineNumbers: 'on',
+      renderLineHighlight: 'all',
+      scrollBeyondLastLine: false,
+      minimap: { enabled: true, maxColumn: 80, renderCharacters: false },
+      smoothScrolling: true,
+      cursorBlinking: 'smooth',
+      cursorSmoothCaretAnimation: 'on',
+      padding: { top: 8, bottom: 8 },
+      tabSize: 2,
+    });
+
+    editorRef.current = editor;
+
+    // Register IDE Keyboard Shortcuts directly in Monaco
+    // Ctrl+S: Save File
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+      const activeId = useEditorStore.getState().activeBufferId;
+      if (activeId) {
+        saveFile(activeId);
+      }
+    });
+
+    // Ctrl+W: Close Tab
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyW, () => {
+      const activeId = useEditorStore.getState().activeBufferId;
+      if (activeId) {
+        closeFile(activeId);
+      }
+    });
+
+    // Ctrl+\: Toggle Split View
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Backslash, () => {
+      const currentSplit = useEditorStore.getState().splitDirection;
+      setSplitDirection(currentSplit === 'vertical' ? 'none' : 'vertical');
+    });
+
+    // Track Cursor Position
+    const cursorListener = editor.onDidChangeCursorPosition((e) => {
+      const activeId = useEditorStore.getState().activeBufferId;
+      if (activeId) {
+        updateCursor(activeId, e.position.lineNumber, e.position.column);
+      }
+    });
+
+    // Auto-layout on resize
+    const resizeObserver = new ResizeObserver(() => {
+      editor.layout();
+    });
+    resizeObserver.observe(containerRef.current);
+
+    return () => {
+      cursorListener.dispose();
+      resizeObserver.disconnect();
+      editor.dispose();
+      editorRef.current = null;
+    };
+  }, []);
+
+  // Update or switch Monaco Model when bufferId changes
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    if (!buffer) {
+      editor.setModel(null);
+      return;
+    }
+
+    const uri = monaco.Uri.parse(`file:///${buffer.filePath}`);
+    let model = monaco.editor.getModel(uri);
+
+    if (!model) {
+      model = monaco.editor.createModel(buffer.content, buffer.language, uri);
+      modelsMapRef.current.set(buffer.id, model);
+    } else {
+      if (model.getValue() !== buffer.content && !buffer.isDirty) {
+        model.setValue(buffer.content);
+      }
+      monaco.editor.setModelLanguage(model, buffer.language);
+    }
+
+    editor.setModel(model);
+
+    // Sync content edits from Monaco to Zustand
+    const contentListener = model.onDidChangeContent(() => {
+      if (editor.getModel() === model) {
+        const val = model.getValue();
+        updateContent(buffer.id, val);
+      }
+    });
+
+    return () => {
+      contentListener.dispose();
+    };
+  }, [bufferId, buffer?.filePath, buffer?.language]);
+
+  if (!buffer) {
+    return (
+      <div className="h-full w-full flex flex-col items-center justify-center text-ide-textMuted bg-ide-editor select-none">
+        <p className="text-sm">No open files</p>
+        <p className="text-xs text-ide-textMuted/70 mt-1">Open a file from the Explorer or press Ctrl+P</p>
+      </div>
+    );
+  }
+
+  return <div ref={containerRef} className="h-full w-full overflow-hidden" />;
+};
