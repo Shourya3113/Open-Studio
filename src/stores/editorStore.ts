@@ -18,6 +18,7 @@ interface EditorState {
   setSplitActiveBuffer: (id: string | null) => void;
   setSplitDirection: (direction: SplitDirection) => void;
   updateCursor: (id: string, line: number, column: number) => void;
+  insertTextAtCursor: (text: string) => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -170,5 +171,25 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         },
       };
     });
+  },
+
+  insertTextAtCursor: (text: string) => {
+    const { activeBufferId, buffers } = get();
+    if (!activeBufferId) return;
+    const buffer = buffers[activeBufferId];
+    if (!buffer) return;
+
+    const lines = buffer.content.split('\n');
+    const pos = buffer.cursorPosition || { line: lines.length, column: (lines[lines.length - 1]?.length || 0) + 1 };
+    const lineIdx = Math.max(0, Math.min(pos.line - 1, lines.length - 1));
+    const targetLine = lines[lineIdx] ?? '';
+    const colIdx = Math.max(0, Math.min(pos.column - 1, targetLine.length));
+
+    const before = targetLine.substring(0, colIdx);
+    const after = targetLine.substring(colIdx);
+    lines[lineIdx] = before + text + after;
+
+    const newContent = lines.join('\n');
+    get().updateContent(activeBufferId, newContent);
   },
 }));

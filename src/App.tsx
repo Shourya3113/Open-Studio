@@ -8,21 +8,20 @@ import {
   Settings, 
   ChevronRight, 
   Code2, 
-  Zap,
-  Send,
-  Square,
-  Cpu
+  Zap
 } from 'lucide-react';
 import { AppSystemInfo } from './types/system';
 import { InferenceHealth } from './types/inference';
-import { checkInferenceHealth, streamCompletion } from './services/inference';
+import { checkInferenceHealth } from './services/inference';
 import { autocompleteTracker, AutocompleteMetrics } from './features/autocomplete/benchmark';
 import { getHardwareTier, HardwareTierInfo, formatTokenBudget } from './features/inference/hardwareTier';
 import { HardwareSentinelModal } from './components/inference/HardwareSentinelModal';
 import { EditorContainer } from './components/editor/EditorContainer';
 import { FileTree } from './components/sidebar/FileTree';
 import { TerminalPanel } from './components/terminal/TerminalPanel';
+import { ChatPanel } from './components/chat/ChatPanel';
 import { useEditorStore } from './stores/editorStore';
+import { useChatStore } from './stores/chatStore';
 
 const SAMPLE_WELCOME_TS = `// Open Studio: Local AI IDE & Agentic Workspace
 // Day 2: Monaco Editor Core & Offline Bundling Verified
@@ -75,12 +74,8 @@ export default function App() {
   const [bottomPanelHeight, setBottomPanelHeight] = useState(220);
 
   const [inferenceHealth, setInferenceHealth] = useState<InferenceHealth | null>(null);
-  const [selectedModel, setSelectedModel] = useState<string>('qwen2.5-coder:1.5b');
-  const [chatPrompt, setChatPrompt] = useState('Write a concise function to reverse a string');
-  const [chatResponse, setChatResponse] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [abortFn, setAbortFn] = useState<(() => void) | null>(null);
-  const [genStats, setGenStats] = useState<string | null>(null);
+  const selectedModel = useChatStore((s) => s.selectedModel);
+  const setSelectedModel = useChatStore((s) => s.setSelectedModel);
 
   const [autocompleteMetrics, setAutocompleteMetrics] = useState<AutocompleteMetrics | null>(null);
   const [hardwareTier, setHardwareTier] = useState<HardwareTierInfo | null>(null);
@@ -100,17 +95,17 @@ export default function App() {
       setInferenceHealth(health);
       setHardwareTier(tier);
       if (health.models.length > 0) {
-        setSelectedModel((prev) => {
-          if (health.models.some((m) => m.name === prev)) return prev;
-          return health.models[0].name;
-        });
+        const currModel = useChatStore.getState().selectedModel;
+        if (!health.models.some((m) => m.name === currModel)) {
+          setSelectedModel(health.models[0].name);
+        }
       }
     } catch {
       // Retain state
     } finally {
       setIsReconnecting(false);
     }
-  }, []);
+  }, [setSelectedModel]);
 
   // Poll / check inference health, fetch hardware tier, and subscribe to autocomplete telemetry
   useEffect(() => {
@@ -132,49 +127,6 @@ export default function App() {
       clearInterval(reconnectTimer);
     };
   }, [refreshInferenceTelemetry]);
-
-  const handleGenerate = async () => {
-    if (!chatPrompt.trim() || isGenerating) return;
-    setIsGenerating(true);
-    setChatResponse('');
-    setGenStats(null);
-
-    try {
-      const cancel = await streamCompletion(
-        {
-          model: selectedModel,
-          prompt: chatPrompt,
-          temperature: 0.2,
-        },
-        (token) => {
-          setChatResponse((prev) => prev + token);
-        },
-        (stats) => {
-          setIsGenerating(false);
-          setAbortFn(null);
-          if (stats.eval_count && stats.eval_duration) {
-            const tokPerSec = (stats.eval_count / (stats.eval_duration / 1e9)).toFixed(1);
-            setGenStats(`${stats.eval_count} tokens • ${tokPerSec} tok/s`);
-          } else {
-            setGenStats('Completed');
-          }
-        }
-      );
-      setAbortFn(() => cancel);
-    } catch (err) {
-      setChatResponse(`Inference error: ${err}`);
-      setIsGenerating(false);
-      setAbortFn(null);
-    }
-  };
-
-  const handleStop = () => {
-    if (abortFn) {
-      abortFn();
-      setAbortFn(null);
-    }
-    setIsGenerating(false);
-  };
 
   // Global IDE shortcuts: Ctrl+` (Terminal), Ctrl+B (Sidebar)
   useEffect(() => {
@@ -349,95 +301,7 @@ export default function App() {
                 {activeTab === 'files' && <FileTree />}
 
                 {activeTab === 'chat' && (
-                  <div className="flex flex-col h-full p-2.5 space-y-2 overflow-y-auto">
-                    {/* Header with Model Selector */}
-                    <div className="bg-ide-bg border border-ide-border rounded p-2 text-xs space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-ide-textBright flex items-center gap-1">
-                          <Cpu size={13} className="text-ide-accent" />
-                          <span>Ollama Gateway</span>
-                        </span>
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${inferenceHealth?.online ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'}`}>
-                          {inferenceHealth?.online ? 'Online' : 'Offline'}
-                        </span>
-                      </div>
-                      
-                      {inferenceHealth && inferenceHealth.models.length > 0 ? (
-                        <select
-                          value={selectedModel}
-                          onChange={(e) => setSelectedModel(e.target.value)}
-                          className="w-full bg-ide-panel border border-ide-border rounded px-2 py-1 text-xs text-ide-textBright focus:outline-none focus:border-ide-accent"
-                        >
-                          {inferenceHealth.models.map((m) => (
-                            <option key={m.name} value={m.name}>
-                              {m.name}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <div className="text-[11px] text-ide-textMuted">
-                          qwen2.5-coder:1.5b (Resident Default)
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Prompt input */}
-                    <div className="space-y-1">
-                      <label className="text-[11px] text-ide-textMuted block font-medium">Prompt</label>
-                      <textarea
-                        value={chatPrompt}
-                        onChange={(e) => setChatPrompt(e.target.value)}
-                        placeholder="Enter coding task or question..."
-                        rows={3}
-                        className="w-full bg-ide-bg border border-ide-border rounded p-2 text-xs text-ide-textBright focus:outline-none focus:border-ide-accent resize-none font-mono"
-                      />
-                      <div className="flex items-center justify-between pt-1">
-                        {isGenerating ? (
-                          <button
-                            onClick={handleStop}
-                            className="flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 rounded text-xs transition"
-                          >
-                            <Square size={12} fill="white" />
-                            <span>Stop</span>
-                          </button>
-                        ) : (
-                          <button
-                            onClick={handleGenerate}
-                            disabled={!chatPrompt.trim()}
-                            className="flex items-center gap-1.5 bg-ide-accent hover:bg-blue-600 disabled:opacity-50 text-white px-3 py-1 rounded text-xs transition font-medium"
-                          >
-                            <Send size={12} />
-                            <span>Generate</span>
-                          </button>
-                        )}
-                        {genStats && (
-                          <span className="text-[10px] text-emerald-400 font-mono">
-                            {genStats}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Streaming Output Viewer */}
-                    <div className="flex-1 flex flex-col min-h-[140px] bg-ide-bg border border-ide-border rounded p-2 overflow-hidden">
-                      <div className="text-[10px] uppercase font-semibold text-ide-textMuted tracking-wider mb-1 flex items-center justify-between">
-                        <span>Streaming Output</span>
-                        {isGenerating && (
-                          <span className="flex items-center gap-1 text-emerald-400">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-                            <span>Streaming...</span>
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex-1 overflow-y-auto font-mono text-xs text-ide-textBright whitespace-pre-wrap select-text leading-relaxed">
-                        {chatResponse || (
-                          <span className="text-ide-textMuted italic">
-                            Tokens streamed via Ollama SSE will appear here in real-time...
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                  <ChatPanel inferenceHealth={inferenceHealth} />
                 )}
 
                 {activeTab === 'settings' && (
