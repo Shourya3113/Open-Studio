@@ -5,6 +5,12 @@ import {
   CHATML_STOP_TOKENS, 
   DEFAULT_SYSTEM_PROMPT 
 } from '../features/chat/promptBuilder';
+import { 
+  extractFileMentions, 
+  resolveFileContent, 
+  injectFileContext 
+} from '../features/chat/fileMention';
+import { useEditorStore } from './editorStore';
 import { streamCompletion } from '../services/inference';
 
 export interface ChatState {
@@ -65,7 +71,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
 
     const model = modelOverride || get().selectedModel;
-    const prompt = buildChatMLPrompt(newMessages, get().systemPrompt);
+
+    // Resolve @file mentions for grounding context
+    const mentions = extractFileMentions(trimmed);
+    let enrichedContent = trimmed;
+    if (mentions.length > 0) {
+      const openBuffers = useEditorStore.getState().buffers;
+      const resolved = await Promise.all(
+        mentions.map((m) => resolveFileContent(m, openBuffers))
+      );
+      const validFiles = resolved.filter(Boolean) as { relPath: string; content: string }[];
+      if (validFiles.length > 0) {
+        enrichedContent = injectFileContext(trimmed, validFiles);
+      }
+    }
+
+    const messagesForPrompt = newMessages.map((m) =>
+      m.id === userMessage.id ? { ...m, content: enrichedContent } : m
+    );
+    const prompt = buildChatMLPrompt(messagesForPrompt, get().systemPrompt);
 
     try {
       const cancel = await streamCompletion(

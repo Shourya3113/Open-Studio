@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Check, ArrowDownToLine, Code2 } from 'lucide-react';
+import { Copy, Check, ArrowDownToLine, Code2, AtSign } from 'lucide-react';
 import { useEditorStore } from '../../stores/editorStore';
 
 interface MarkdownMessageProps {
@@ -263,12 +263,55 @@ function renderInlineSpans(text: string): React.ReactNode[] {
   return parts;
 }
 
+const FileChip: React.FC<{ filePath: string }> = ({ filePath }) => {
+  const openFile = useEditorStore((s) => s.openFile);
+  const cleanPath = filePath.replace(/^file:/, '');
+  const fileName = cleanPath.split(/[/\\]/).pop() || cleanPath;
+
+  return (
+    <button
+      onClick={() => openFile(cleanPath)}
+      className="inline-flex items-center gap-1 px-1.5 py-0.2 mx-0.5 rounded bg-ide-accent/15 hover:bg-ide-accent/30 border border-ide-accent/40 text-ide-accent text-[11px] font-mono transition cursor-pointer select-none"
+      title={`Open ${cleanPath} in Monaco Editor`}
+    >
+      <AtSign size={10} />
+      <span>{fileName}</span>
+    </button>
+  );
+};
+
 function renderFormatting(text: string, keyPrefix: number): React.ReactNode {
-  // Bold **text**
+  // Check for @file:<path> or @<path> file mentions
+  const mentionRegex = /@(?:file:)?([a-zA-Z0-9_\-./\\]+\.[a-zA-Z0-9]+)/g;
+  if (mentionRegex.test(text)) {
+    const parts: React.ReactNode[] = [];
+    let lastIdx = 0;
+    let match: RegExpExecArray | null;
+    mentionRegex.lastIndex = 0;
+
+    while ((match = mentionRegex.exec(text)) !== null) {
+      if (match.index > lastIdx) {
+        parts.push(renderBold(text.substring(lastIdx, match.index), parts.length));
+      }
+      parts.push(<FileChip key={`chip_${match.index}`} filePath={match[1]} />);
+      lastIdx = match.index + match[0].length;
+    }
+
+    if (lastIdx < text.length) {
+      parts.push(renderBold(text.substring(lastIdx), parts.length));
+    }
+
+    return <span key={`fmt_${keyPrefix}`}>{parts}</span>;
+  }
+
+  return renderBold(text, keyPrefix);
+}
+
+function renderBold(text: string, keyPrefix: number): React.ReactNode {
   if (text.includes('**')) {
     const boldParts = text.split(/\*\*([^*]+)\*\*/g);
     return (
-      <span key={`fmt_${keyPrefix}`}>
+      <span key={`bold_${keyPrefix}`}>
         {boldParts.map((part, i) =>
           i % 2 === 1 ? (
             <strong key={i} className="font-semibold text-white">

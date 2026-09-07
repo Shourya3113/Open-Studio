@@ -15,13 +15,20 @@ import {
 import { useChatStore } from '../../stores/chatStore';
 import { MarkdownMessage } from './MarkdownMessage';
 import { InferenceHealth } from '../../types/inference';
+import { 
+  WorkspaceFileItem, 
+  flattenFileTree, 
+  searchWorkspaceFiles 
+} from '../../features/chat/fileMention';
+import { FileMentionDropdown } from './FileMentionDropdown';
+import { FileNode } from '../../types/fs';
 
 interface ChatPanelProps {
   inferenceHealth?: InferenceHealth | null;
 }
 
 const STARTER_PROMPTS = [
-  'Explain the logic of the active buffer',
+  'Explain the logic of @file:src/App.tsx',
   'Write comprehensive unit tests with edge cases',
   'Refactor algorithm for lower memory overhead',
   'Identify potential concurrency bottlenecks',
@@ -30,6 +37,19 @@ const STARTER_PROMPTS = [
 export const ChatPanel: React.FC<ChatPanelProps> = ({ inferenceHealth }) => {
   const [input, setInput] = useState('');
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+  const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFileItem[]>([]);
+  const [mentionState, setMentionState] = useState<{
+    active: boolean;
+    query: string;
+    triggerIndex: number;
+    selectedIndex: number;
+  }>({
+    active: false,
+    query: '',
+    triggerIndex: -1,
+    selectedIndex: 0,
+  });
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -46,6 +66,33 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ inferenceHealth }) => {
     deleteMessage,
   } = useChatStore();
 
+  // Load workspace files for @ autocomplete
+  useEffect(() => {
+    async function loadWorkspaceFiles() {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const tree = await invoke<FileNode>('read_workspace_tree');
+        setWorkspaceFiles(flattenFileTree(tree));
+      } catch {
+        // Dev fallback files
+        setWorkspaceFiles([
+          { name: 'App.tsx', path: 'src/App.tsx', relPath: 'src/App.tsx' },
+          { name: 'main.tsx', path: 'src/main.tsx', relPath: 'src/main.tsx' },
+          { name: 'chatStore.ts', path: 'src/stores/chatStore.ts', relPath: 'src/stores/chatStore.ts' },
+          { name: 'editorStore.ts', path: 'src/stores/editorStore.ts', relPath: 'src/stores/editorStore.ts' },
+          { name: 'ChatPanel.tsx', path: 'src/components/chat/ChatPanel.tsx', relPath: 'src/components/chat/ChatPanel.tsx' },
+          { name: 'Cargo.toml', path: 'src-tauri/Cargo.toml', relPath: 'src-tauri/Cargo.toml' },
+          { name: 'package.json', path: 'package.json', relPath: 'package.json' },
+        ]);
+      }
+    }
+    loadWorkspaceFiles();
+  }, []);
+
+  const filteredFiles = mentionState.active
+    ? searchWorkspaceFiles(mentionState.query, workspaceFiles, 6)
+    : [];
+
   // Scroll to bottom when messages or tokens change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -60,10 +107,78 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ inferenceHealth }) => {
     const text = input.trim();
     if (!text || isGenerating) return;
     setInput('');
+    setMentionState((prev) => ({ ...prev, active: false }));
     await sendMessage(text);
   };
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    const cursorPos = e.target.selectionStart;
+    setInput(val);
+
+    const beforeCursor = val.substring(0, cursorPos);
+    const atMatch = beforeCursor.match(/@([a-zA-Z0-9_\-./\\]*)$/);
+
+    if (atMatch) {
+      setMentionState({
+        active: true,
+        query: atMatch[1],
+        triggerIndex: atMatch.index!,
+        selectedIndex: 0,
+      });
+    } else {
+      setMentionState((prev) => (prev.active ? { ...prev, active: false } : prev));
+    }
+  };
+
+  const handleSelectFile = (file: WorkspaceFileItem) => {
+    const before = input.substring(0, mentionState.triggerIndex);
+    const cursorPos = textareaRef.current?.selectionStart || input.length;
+    const after = input.substring(cursorPos);
+    const insertion = `@file:${file.relPath} `;
+    const nextInput = before + insertion + after;
+    setInput(nextInput);
+    setMentionState((prev) => ({ ...prev, active: false }));
+
+    setTimeout(() => {
+      if (textareaRef.current) {
+        const newPos = before.length + insertion.length;
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(newPos, newPos);
+      }
+    }, 10);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionState.active && filteredFiles.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionState((prev) => ({
+          ...prev,
+          selectedIndex: (prev.selectedIndex + 1) % filteredFiles.length,
+        }));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionState((prev) => ({
+          ...prev,
+          selectedIndex: (prev.selectedIndex - 1 + filteredFiles.length) % filteredFiles.length,
+        }));
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        handleSelectFile(filteredFiles[mentionState.selectedIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMentionState((prev) => ({ ...prev, active: false }));
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -203,9 +318,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ inferenceHealth }) => {
                   }`}
                 >
                   {isUser ? (
-                    <div className="whitespace-pre-wrap leading-relaxed font-sans">
-                      {msg.content}
-                    </div>
+                    <MarkdownMessage content={msg.content} />
                   ) : (
                     <MarkdownMessage
                       content={msg.content}
@@ -271,14 +384,22 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ inferenceHealth }) => {
       </div>
 
       {/* Input Area */}
-      <div className="p-2.5 border-t border-ide-border bg-ide-activityBar/20 select-none">
+      <div className="p-2.5 border-t border-ide-border bg-ide-activityBar/20 select-none relative">
+        {mentionState.active && filteredFiles.length > 0 && (
+          <FileMentionDropdown
+            files={filteredFiles}
+            selectedIndex={mentionState.selectedIndex}
+            onSelect={handleSelectFile}
+            onClose={() => setMentionState((prev) => ({ ...prev, active: false }))}
+          />
+        )}
         <div className="relative bg-ide-bg border border-ide-border rounded-md shadow-inner focus-within:border-ide-accent transition">
           <textarea
             ref={textareaRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder="Ask AI or type a coding task... (Shift+Enter for newline)"
+            placeholder="Ask AI or type @ to attach file context... (Shift+Enter for newline)"
             rows={2}
             className="w-full bg-transparent p-2.5 text-xs text-ide-textBright placeholder-ide-textMuted focus:outline-none resize-none font-sans leading-relaxed"
           />
