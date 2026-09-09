@@ -261,6 +261,15 @@ export const useDiffReviewStore = create<DiffReviewState>((set, get) => ({
     try {
       const editorStore = useEditorStore.getState();
 
+      // Automatic shadow checkpoint before writing any changes
+      try {
+        const { createCheckpoint } = await import('../features/git/checkpoint');
+        const fileNames = diffs.map((d) => d.filePath.split(/[/\\]/).pop()).join(', ');
+        await createCheckpoint(`Pre-diff edit on ${fileNames}`);
+      } catch {
+        // Non-git workspace fallback
+      }
+
       for (const file of diffs) {
         const acceptedHunks: DiffHunk[] = file.hunks.filter(
           (h) => hunkDecisions[getHunkKey(file.filePath, h.id)] === 'accepted'

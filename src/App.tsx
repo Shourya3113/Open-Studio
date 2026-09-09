@@ -8,7 +8,8 @@ import {
   Settings, 
   ChevronRight, 
   Code2, 
-  Zap
+  Zap,
+  History
 } from 'lucide-react';
 import { AppSystemInfo } from './types/system';
 import { InferenceHealth } from './types/inference';
@@ -21,6 +22,7 @@ import { FileTree } from './components/sidebar/FileTree';
 import { TerminalPanel } from './components/terminal/TerminalPanel';
 import { ChatPanel } from './components/chat/ChatPanel';
 import { DiffReviewModal } from './components/diff/DiffReviewModal';
+import { CheckpointModal } from './components/git/CheckpointModal';
 import { useEditorStore } from './stores/editorStore';
 import { useChatStore } from './stores/chatStore';
 
@@ -81,6 +83,7 @@ export default function App() {
   const [autocompleteMetrics, setAutocompleteMetrics] = useState<AutocompleteMetrics | null>(null);
   const [hardwareTier, setHardwareTier] = useState<HardwareTierInfo | null>(null);
   const [isHardwareModalOpen, setIsHardwareModalOpen] = useState(false);
+  const [isCheckpointModalOpen, setIsCheckpointModalOpen] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
 
   const { openFile, buffers, activeBufferId } = useEditorStore();
@@ -369,6 +372,14 @@ export default function App() {
             <span>main</span>
           </span>
           <button 
+            onClick={() => setIsCheckpointModalOpen(true)}
+            className="flex items-center gap-1 text-blue-400 hover:text-blue-300 hover:bg-ide-hover px-1.5 py-0.5 rounded transition cursor-pointer"
+            title="View Shadow Git Checkpoints & 1-Click Rollback"
+          >
+            <History size={12} />
+            <span>Checkpoints</span>
+          </button>
+          <button 
             onClick={() => setIsBottomPanelOpen(prev => !prev)}
             className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded transition ${isBottomPanelOpen ? 'text-ide-accent bg-ide-hover' : 'hover:text-ide-textBright'}`}
             title="Toggle Terminal (Ctrl+`)"
@@ -434,6 +445,12 @@ export default function App() {
 
       {/* Monaco Multi-File Diff Review Modal */}
       <DiffReviewModal />
+
+      {/* Shadow Git Checkpoint & Rollback Modal */}
+      <CheckpointModal
+        isOpen={isCheckpointModalOpen}
+        onClose={() => setIsCheckpointModalOpen(false)}
+      />
     </div>
   );
 }
