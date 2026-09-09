@@ -38,8 +38,8 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   const activeDockTab = controlledTab ?? internalTab;
   const setDockTab = onTabChange ?? setInternalTab;
 
-  const { getTotalCounts } = useDiagnosticsStore();
-  const diagCounts = getTotalCounts();
+  const errorCount = useDiagnosticsStore((s) => s.errorCount);
+  const totalProblemsCount = useDiagnosticsStore((s) => s.totalCount);
 
   const [sessions, setSessions] = useState<TabSession[]>([
     { id: 'term_1', name: '1: shell' }
@@ -275,15 +275,15 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
                 : 'text-ide-textMuted hover:text-ide-textBright hover:bg-ide-hover/50 border-transparent'
             }`}
           >
-            <AlertCircle size={12} className={diagCounts.errors > 0 ? 'text-rose-400' : 'text-ide-textMuted'} />
+            <AlertCircle size={12} className={errorCount > 0 ? 'text-rose-400' : 'text-ide-textMuted'} />
             <span>PROBLEMS</span>
-            {diagCounts.total > 0 && (
+            {totalProblemsCount > 0 && (
               <span
                 className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                  diagCounts.errors > 0 ? 'bg-rose-500/20 text-rose-300' : 'bg-amber-500/20 text-amber-300'
+                  errorCount > 0 ? 'bg-rose-500/20 text-rose-300' : 'bg-amber-500/20 text-amber-300'
                 }`}
               >
-                {diagCounts.total}
+                {totalProblemsCount}
               </span>
             )}
           </button>

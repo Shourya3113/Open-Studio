@@ -4,11 +4,36 @@ import { parseDiagnosticsOutput, groupDiagnosticsByFile, normalizeDiagnosticPath
 
 export type DiagnosticFilterSeverity = 'all' | 'errors' | 'warnings';
 
+function computeCounts(diagnostics: Record<string, DiagnosticItem[]>) {
+  let errorCount = 0;
+  let warningCount = 0;
+  let infoCount = 0;
+
+  Object.values(diagnostics).forEach((items) => {
+    items.forEach((item) => {
+      if (item.severity === 'error') errorCount++;
+      else if (item.severity === 'warning') warningCount++;
+      else infoCount++;
+    });
+  });
+
+  return {
+    errorCount,
+    warningCount,
+    infoCount,
+    totalCount: errorCount + warningCount + infoCount,
+  };
+}
+
 export interface DiagnosticsState {
   diagnostics: Record<string, DiagnosticItem[]>;
   selectedDiagnosticId: string | null;
   filterSeverity: DiagnosticFilterSeverity;
   searchQuery: string;
+  errorCount: number;
+  warningCount: number;
+  infoCount: number;
+  totalCount: number;
 
   // Actions
   setFileDiagnostics: (filePath: string, items: DiagnosticItem[]) => void;
@@ -31,15 +56,23 @@ export const useDiagnosticsStore = create<DiagnosticsState>((set, get) => ({
   selectedDiagnosticId: null,
   filterSeverity: 'all',
   searchQuery: '',
+  errorCount: 0,
+  warningCount: 0,
+  infoCount: 0,
+  totalCount: 0,
 
   setFileDiagnostics: (filePath, items) => {
     const norm = normalizeDiagnosticPath(filePath);
-    set((state) => ({
-      diagnostics: {
+    set((state) => {
+      const next = {
         ...state.diagnostics,
         [norm]: items,
-      },
-    }));
+      };
+      return {
+        diagnostics: next,
+        ...computeCounts(next),
+      };
+    });
   },
 
   addDiagnostics: (items) => {
@@ -61,7 +94,10 @@ export const useDiagnosticsStore = create<DiagnosticsState>((set, get) => ({
           next[norm] = [...next[norm], item];
         }
       }
-      return { diagnostics: next };
+      return {
+        diagnostics: next,
+        ...computeCounts(next),
+      };
     });
   },
 
@@ -70,12 +106,22 @@ export const useDiagnosticsStore = create<DiagnosticsState>((set, get) => ({
     set((state) => {
       const next = { ...state.diagnostics };
       delete next[norm];
-      return { diagnostics: next };
+      return {
+        diagnostics: next,
+        ...computeCounts(next),
+      };
     });
   },
 
   clearAllDiagnostics: () => {
-    set({ diagnostics: {}, selectedDiagnosticId: null });
+    set({
+      diagnostics: {},
+      selectedDiagnosticId: null,
+      errorCount: 0,
+      warningCount: 0,
+      infoCount: 0,
+      totalCount: 0,
+    });
   },
 
   setFilterSeverity: (filterSeverity) => set({ filterSeverity }),
@@ -95,24 +141,15 @@ export const useDiagnosticsStore = create<DiagnosticsState>((set, get) => ({
       }
       newMap[norm].push(item);
     }
-    set({ diagnostics: newMap });
+    set({
+      diagnostics: newMap,
+      ...computeCounts(newMap),
+    });
   },
 
   getTotalCounts: () => {
-    const { diagnostics } = get();
-    let errors = 0;
-    let warnings = 0;
-    let infos = 0;
-
-    Object.values(diagnostics).forEach((items) => {
-      items.forEach((item) => {
-        if (item.severity === 'error') errors++;
-        else if (item.severity === 'warning') warnings++;
-        else infos++;
-      });
-    });
-
-    return { errors, warnings, infos, total: errors + warnings + infos };
+    const { errorCount, warningCount, infoCount, totalCount } = get();
+    return { errors: errorCount, warnings: warningCount, infos: infoCount, total: totalCount };
   },
 
   getAllItems: () => {

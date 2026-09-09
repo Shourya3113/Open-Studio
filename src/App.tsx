@@ -88,7 +88,9 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(220);
   const [bottomPanelTab, setBottomPanelTab] = useState<'terminal' | 'problems'>('terminal');
-  const diagCounts = useDiagnosticsStore((s) => s.getTotalCounts());
+  const errorCount = useDiagnosticsStore((s) => s.errorCount);
+  const warningCount = useDiagnosticsStore((s) => s.warningCount);
+  const totalProblemsCount = useDiagnosticsStore((s) => s.totalCount);
 
   const [inferenceHealth, setInferenceHealth] = useState<InferenceHealth | null>(null);
   const selectedModel = useChatStore((s) => s.selectedModel);
@@ -565,10 +567,10 @@ export default function App() {
             }`}
             title="Toggle Problems & Diagnostics (Ctrl+Shift+M)"
           >
-            <AlertCircle size={12} className={diagCounts.errors > 0 ? 'text-rose-400' : diagCounts.warnings > 0 ? 'text-amber-400' : 'text-emerald-400'} />
-            <span className={diagCounts.errors > 0 ? 'text-rose-300 font-medium' : diagCounts.warnings > 0 ? 'text-amber-300' : ''}>
-              {diagCounts.total > 0
-                ? `${diagCounts.errors > 0 ? `${diagCounts.errors} error${diagCounts.errors > 1 ? 's' : ''}` : ''}${diagCounts.errors > 0 && diagCounts.warnings > 0 ? ', ' : ''}${diagCounts.warnings > 0 ? `${diagCounts.warnings} warning${diagCounts.warnings > 1 ? 's' : ''}` : ''}`
+            <AlertCircle size={12} className={errorCount > 0 ? 'text-rose-400' : warningCount > 0 ? 'text-amber-400' : 'text-emerald-400'} />
+            <span className={errorCount > 0 ? 'text-rose-300 font-medium' : warningCount > 0 ? 'text-amber-300' : ''}>
+              {totalProblemsCount > 0
+                ? `${errorCount > 0 ? `${errorCount} error${errorCount > 1 ? 's' : ''}` : ''}${errorCount > 0 && warningCount > 0 ? ', ' : ''}${warningCount > 0 ? `${warningCount} warning${warningCount > 1 ? 's' : ''}` : ''}`
                 : '0 Problems'}
             </span>
           </button>
