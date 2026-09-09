@@ -52,20 +52,38 @@ export function buildChatMLPrompt(
 }
 
 /**
- * Injects repository structural skeleton if @repo or @skeleton token is detected
+ * Injects repository structural skeleton (@repo) and/or BM25 lexical search snippets (@codebase)
  */
 export async function augmentPromptWithRepoContext(
   userQuery: string,
   baseSystemPrompt: string = DEFAULT_SYSTEM_PROMPT
 ): Promise<{ systemPrompt: string; hasRepoContext: boolean }> {
-  const hasRepoTag = /@repo\b|@skeleton\b|@codebase\b/i.test(userQuery);
-  if (!hasRepoTag) {
+  const hasRepoTag = /@repo\b|@skeleton\b/i.test(userQuery);
+  const hasCodebaseTag = /@codebase\b/i.test(userQuery);
+
+  if (!hasRepoTag && !hasCodebaseTag) {
     return { systemPrompt: baseSystemPrompt, hasRepoContext: false };
   }
 
-  const { getRepoSkeleton } = await import('../ast/repoMap');
-  const skeleton = await getRepoSkeleton('.');
+  let augmented = baseSystemPrompt;
 
-  const augmented = `${baseSystemPrompt}\n\n${skeleton.composite_prompt}`;
+  // Handle @codebase: BM25 lexical retrieval over workspace files
+  if (hasCodebaseTag) {
+    const { searchBM25, formatBM25ContextBlock } = await import('../rag/bm25Search');
+    const cleanQuery = userQuery.replace(/@codebase/gi, '').trim();
+    const results = await searchBM25(cleanQuery || 'main', 5);
+    const bm25Block = formatBM25ContextBlock(results);
+    if (bm25Block) {
+      augmented = `${augmented}\n\n${bm25Block}`;
+    }
+  }
+
+  // Handle @repo: Tree-sitter structural AST skeleton map
+  if (hasRepoTag) {
+    const { getRepoSkeleton } = await import('../ast/repoMap');
+    const skeleton = await getRepoSkeleton('.');
+    augmented = `${augmented}\n\n${skeleton.composite_prompt}`;
+  }
+
   return { systemPrompt: augmented, hasRepoContext: true };
 }

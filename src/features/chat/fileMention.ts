@@ -74,6 +74,12 @@ export const SPECIAL_MENTION_REPO: WorkspaceFileItem = {
   relPath: 'repo',
 };
 
+export const SPECIAL_MENTION_CODEBASE: WorkspaceFileItem = {
+  name: '@codebase (Search Workspace via BM25)',
+  path: '__codebase_bm25__',
+  relPath: 'codebase',
+};
+
 /**
  * Performs fuzzy / substring search across workspace files.
  * Prioritizes exact filename matches, followed by prefix matches and substring path matches.
@@ -84,11 +90,17 @@ export function searchWorkspaceFiles(
   limit = 8
 ): WorkspaceFileItem[] {
   const q = query.toLowerCase().trim();
-  const includeRepo = !q || 'repo'.includes(q) || 'skeleton'.includes(q) || 'codebase'.includes(q);
-  const extraItems: WorkspaceFileItem[] = includeRepo ? [SPECIAL_MENTION_REPO] : [];
+  const extraItems: WorkspaceFileItem[] = [];
+
+  if (!q || 'codebase'.includes(q)) {
+    extraItems.push(SPECIAL_MENTION_CODEBASE);
+  }
+  if (!q || 'repo'.includes(q) || 'skeleton'.includes(q)) {
+    extraItems.push(SPECIAL_MENTION_REPO);
+  }
 
   if (!q) {
-    return [...extraItems, ...files.slice(0, limit - extraItems.length)];
+    return [...extraItems, ...files.slice(0, Math.max(0, limit - extraItems.length))];
   }
 
   const scored = files.map((file) => {

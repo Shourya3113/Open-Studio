@@ -5,6 +5,7 @@ pub mod inference;
 pub mod diff;
 pub mod git;
 pub mod ast;
+pub mod rag;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -12,6 +13,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(terminal::pty::TerminalManager::new())
         .manage(inference::InferenceManager::default())
+        .manage(rag::create_bm25_state())
         .invoke_handler(tauri::generate_handler![
             commands::system::get_system_info,
             fs::read_workspace_tree,
@@ -38,7 +40,9 @@ pub fn run() {
             git::list_checkpoints,
             git::restore_checkpoint,
             ast::slicer::slice_file_ast,
-            ast::slicer::generate_repo_skeleton
+            ast::slicer::generate_repo_skeleton,
+            rag::bm25::build_bm25_index,
+            rag::bm25::search_bm25
         ])
         .run(tauri::generate_context!())
         .expect("error while running Open Studio");

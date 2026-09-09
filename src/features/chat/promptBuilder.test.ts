@@ -91,4 +91,13 @@ describe('ChatML Prompt Builder', () => {
     expect(resultWith.hasRepoContext).toBe(true);
     expect(resultWith.systemPrompt).toContain('REPOSITORY STRUCTURAL SKELETON MAP');
   });
+
+  it('detects @codebase tag and augments system prompt with BM25 retrieved snippets', async () => {
+    const { augmentPromptWithRepoContext } = await import('./promptBuilder');
+
+    const result = await augmentPromptWithRepoContext('Find how health check is implemented in @codebase');
+    expect(result.hasRepoContext).toBe(true);
+    expect(result.systemPrompt).toContain('RELEVANT CODEBASE SNIPPETS (BM25 LEXICAL RETRIEVAL)');
+    expect(result.systemPrompt).toContain('checkInferenceHealth');
+  });
 });
