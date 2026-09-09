@@ -2,6 +2,7 @@ pub mod commands;
 pub mod fs;
 pub mod terminal;
 pub mod inference;
+pub mod diff;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -27,7 +28,10 @@ pub fn run() {
             inference::get_hardware_tier,
             inference::get_model_residency,
             inference::evict_model,
-            inference::evict_idle_models
+            inference::evict_idle_models,
+            diff::parse_frugal_diff,
+            diff::preview_frugal_diff,
+            diff::apply_frugal_diff
         ])
         .run(tauri::generate_context!())
         .expect("error while running Open Studio");
