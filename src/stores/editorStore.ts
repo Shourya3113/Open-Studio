@@ -19,6 +19,7 @@ interface EditorState {
   setSplitDirection: (direction: SplitDirection) => void;
   updateCursor: (id: string, line: number, column: number) => void;
   insertTextAtCursor: (text: string) => void;
+  updateFileContentByPath: (filePath: string, content: string) => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -191,5 +192,31 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     const newContent = lines.join('\n');
     get().updateContent(activeBufferId, newContent);
+  },
+
+  updateFileContentByPath: (filePath: string, content: string) => {
+    const { buffers } = get();
+    const normalizedTarget = filePath.replace(/\\/g, '/');
+    const matchingId = Object.keys(buffers).find((id) => {
+      const bufPath = buffers[id].filePath.replace(/\\/g, '/');
+      return bufPath === normalizedTarget || bufPath.endsWith('/' + normalizedTarget) || normalizedTarget.endsWith('/' + bufPath);
+    });
+
+    if (matchingId) {
+      set((state) => ({
+        buffers: {
+          ...state.buffers,
+          [matchingId]: {
+            ...state.buffers[matchingId],
+            content,
+            isDirty: false,
+          },
+        },
+        savedSnapshots: {
+          ...state.savedSnapshots,
+          [matchingId]: content,
+        },
+      }));
+    }
   },
 }));

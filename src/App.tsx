@@ -20,6 +20,7 @@ import { EditorContainer } from './components/editor/EditorContainer';
 import { FileTree } from './components/sidebar/FileTree';
 import { TerminalPanel } from './components/terminal/TerminalPanel';
 import { ChatPanel } from './components/chat/ChatPanel';
+import { DiffReviewModal } from './components/diff/DiffReviewModal';
 import { useEditorStore } from './stores/editorStore';
 import { useChatStore } from './stores/chatStore';
 
@@ -430,6 +431,9 @@ export default function App() {
         onSelectModel={setSelectedModel}
         onRefreshHealth={refreshInferenceTelemetry}
       />
+
+      {/* Monaco Multi-File Diff Review Modal */}
+      <DiffReviewModal />
     </div>
   );
 }
