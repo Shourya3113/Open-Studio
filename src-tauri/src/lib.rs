@@ -45,7 +45,10 @@ pub fn run() {
             rag::bm25::search_bm25,
             rag::bm25::sync_bm25_file_changes,
             rag::bm25::get_bm25_index_status,
-            rag::aggregator::aggregate_codebase_context
+            rag::aggregator::aggregate_codebase_context,
+            rag::embeddings::chunk_file_content,
+            rag::embeddings::compute_text_embedding,
+            rag::embeddings::compute_cosine_similarity
         ])
         .run(tauri::generate_context!())
         .expect("error while running Open Studio");

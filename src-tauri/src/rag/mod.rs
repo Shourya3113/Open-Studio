@@ -1,5 +1,6 @@
 pub mod bm25;
 pub mod aggregator;
+pub mod embeddings;
 
 pub use bm25::{
     build_bm25_index, create_bm25_state, get_bm25_index_status, search_bm25,
@@ -10,4 +11,10 @@ pub use bm25::{
 pub use aggregator::{
     aggregate_codebase_context, aggregate_context_from_index, AggregatedContextResult,
     AggregatedSnippetItem, ContextAggregationRequest,
+};
+
+pub use embeddings::{
+    chunk_code_file, chunk_file_content, compute_cosine_similarity,
+    compute_text_embedding, cosine_similarity, fetch_embedding, CodeChunk,
+    EmbeddedChunk, DEFAULT_EMBEDDING_MODEL, EMBEDDING_DIMENSION,
 };
