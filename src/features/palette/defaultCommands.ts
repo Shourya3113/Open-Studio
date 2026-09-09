@@ -13,6 +13,8 @@ export interface DefaultCommandsContext {
   saveWorkspace?: () => void;
   resetLayout?: () => void;
   openProblemsTab?: () => void;
+  openSettingsModal?: () => void;
+  openOnboardingModal?: () => void;
 }
 
 export function createDefaultCommands(ctx: DefaultCommandsContext): PaletteCommand[] {
@@ -255,6 +257,33 @@ export function createDefaultCommands(ctx: DefaultCommandsContext): PaletteComma
       handler: () => {
         if (ctx.resetLayout) {
           ctx.resetLayout();
+        }
+      },
+    },
+
+    // --- Preferences & Settings ---
+    {
+      id: 'preferences:settings',
+      title: 'Preferences: Open User Settings',
+      category: 'Preferences',
+      shortcut: 'Ctrl+,',
+      keywords: ['settings', 'preferences', 'config', 'theme', 'ollama', 'model', 'font'],
+      handler: () => {
+        if (ctx.openSettingsModal) {
+          ctx.openSettingsModal();
+        }
+      },
+    },
+
+    // --- Help & Onboarding ---
+    {
+      id: 'help:welcome',
+      title: 'Help: Welcome & Setup Guide',
+      category: 'Help',
+      keywords: ['help', 'welcome', 'onboarding', 'guide', 'tutorial', 'quickstart'],
+      handler: () => {
+        if (ctx.openOnboardingModal) {
+          ctx.openOnboardingModal();
         }
       },
     },

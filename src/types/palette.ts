@@ -4,7 +4,9 @@ export type CommandCategory =
   | 'AI Assistant'
   | 'Git'
   | 'Terminal'
-  | 'Settings';
+  | 'Settings'
+  | 'Preferences'
+  | 'Help';
 
 export interface PaletteCommand {
   id: string;

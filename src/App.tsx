@@ -24,7 +24,10 @@ import { TerminalPanel } from './components/terminal/TerminalPanel';
 import { ChatPanel } from './components/chat/ChatPanel';
 import { DiffReviewModal } from './components/diff/DiffReviewModal';
 import { CheckpointModal } from './components/git/CheckpointModal';
+import { SettingsModal } from './components/settings/SettingsModal';
+import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import { CommandPalette } from './components/palette/CommandPalette';
+import { useSettingsStore } from './stores/settingsStore';
 import { usePaletteStore } from './stores/paletteStore';
 import { createDefaultCommands } from './features/palette/defaultCommands';
 import { useEditorStore } from './stores/editorStore';
@@ -167,6 +170,8 @@ export default function App() {
         },
         openHardwareModal: () => setIsHardwareModalOpen(true),
         openCheckpointModal: () => setIsCheckpointModalOpen(true),
+        openSettingsModal: () => useSettingsStore.getState().openModal(),
+        openOnboardingModal: () => useSettingsStore.getState().openOnboarding(),
         saveWorkspace: () => {
           const state = extractCurrentWorkspaceState({
             sidebarWidth,
@@ -229,6 +234,13 @@ export default function App() {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
         e.preventDefault();
         setIsSidebarOpen((prev) => !prev);
+        return;
+      }
+
+      // Open Settings Modal: Ctrl+,
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault();
+        useSettingsStore.getState().openModal();
         return;
       }
     };
@@ -327,6 +339,9 @@ export default function App() {
         debounceMs: 500,
         getLayout: () => layoutRef.current,
       });
+
+      // Hydrate user settings & check first-run onboarding status
+      useSettingsStore.getState().hydrateSettings().catch(() => {});
     }
 
     initWorkspace();
@@ -433,8 +448,8 @@ export default function App() {
               <Terminal size={19} />
             </button>
             <button 
-              onClick={() => { setActiveTab('settings'); setIsSidebarOpen(true); }}
-              title="Settings (Ctrl+,)"
+              onClick={() => useSettingsStore.getState().openModal()}
+              title="Settings & Preferences (Ctrl+,)"
               className={`p-2 rounded hover:text-ide-textBright transition ${activeTab === 'settings' && isSidebarOpen ? 'text-ide-textBright border-l-2 border-ide-accent bg-ide-hover' : 'text-ide-textMuted'}`}
             >
               <Settings size={19} />
@@ -464,25 +479,42 @@ export default function App() {
                 )}
 
                 {activeTab === 'settings' && (
-                  <div className="p-3 space-y-3">
-                    <div>
-                      <label className="text-ide-textMuted block mb-1">Ollama Endpoint</label>
-                      <input 
-                        type="text" 
-                        readOnly 
-                        value="http://localhost:11434" 
-                        className="w-full bg-ide-bg border border-ide-border rounded px-2 py-1 text-xs text-ide-textBright" 
-                      />
+                  <div className="p-4 space-y-4">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-ide-accent">Preferences</div>
+                    <div className="bg-ide-bg p-3 rounded border border-ide-border space-y-2 text-xs">
+                      <div>
+                        <div className="text-ide-textMuted text-[11px]">Ollama Endpoint</div>
+                        <div className="text-ide-textBright font-mono text-[11px] truncate">
+                          {useSettingsStore.getState().settings.ollamaEndpoint}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-ide-textMuted text-[11px]">Autocomplete Model</div>
+                        <div className="text-ide-textBright font-mono text-[11px] truncate">
+                          {useSettingsStore.getState().settings.autocompleteModel}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-ide-textMuted text-[11px]">Chat & Diff Model</div>
+                        <div className="text-ide-textBright font-mono text-[11px] truncate">
+                          {useSettingsStore.getState().settings.chatModel}
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className="text-ide-textMuted block mb-1">Editor Theme</label>
-                      <input 
-                        type="text" 
-                        readOnly 
-                        value="open-studio-dark" 
-                        className="w-full bg-ide-bg border border-ide-border rounded px-2 py-1 text-xs text-ide-textBright" 
-                      />
-                    </div>
+
+                    <button
+                      onClick={() => useSettingsStore.getState().openModal()}
+                      className="w-full py-2 bg-ide-accent hover:bg-blue-600 text-white rounded text-xs font-medium transition shadow"
+                    >
+                      Open Full Settings (Ctrl+,)
+                    </button>
+
+                    <button
+                      onClick={() => useSettingsStore.getState().openOnboarding()}
+                      className="w-full py-1.5 bg-ide-hover hover:bg-ide-surface text-ide-textBright rounded text-xs transition border border-ide-border"
+                    >
+                      🚀 Welcome & Setup Guide
+                    </button>
                   </div>
                 )}
               </div>
@@ -641,6 +673,12 @@ export default function App() {
 
       {/* Command Palette & Quick Open Modal */}
       <CommandPalette />
+
+      {/* Settings & Preferences Modal (Ctrl+,) */}
+      <SettingsModal />
+
+      {/* First-Run Onboarding Wizard */}
+      <OnboardingWizard />
     </div>
   );
 }

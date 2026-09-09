@@ -47,6 +47,9 @@ import { useDiagnosticsStore } from './stores/diagnosticsStore';
 import { parseDiagnosticsOutput, groupDiagnosticsByFile } from './features/diagnostics/parser';
 import { toMonacoSeverity, toMonacoMarkers } from './features/diagnostics/monacoBridge';
 
+// 8. Settings & Onboarding
+import { useSettingsStore } from './stores/settingsStore';
+
 describe('Phase 1 MVP End-to-End Interoperability Suite (Days 1–20)', () => {
   beforeEach(() => {
     // Reset all stores to clean state
@@ -289,5 +292,33 @@ src/types.ts(5,1): warning TS7027: Unreachable code detected.
     expect(markers[0].code).toBe('TS2304');
     expect(markers[0].startLineNumber).toBe(45);
     expect(markers[0].startColumn).toBe(10);
+  });
+
+  // Pillar 8: Settings & Preferences Engine + Onboarding Wizard
+  it('Pillar 8: manages air-gapped user settings, modal triggers, and onboarding lifecycle', () => {
+    const store = useSettingsStore.getState();
+    expect(store.settings.telemetryDisabled).toBe(true);
+    expect(store.settings.ollamaEndpoint).toBe('http://localhost:11434');
+
+    // Update settings
+    store.updateSettings({
+      fontSize: 16,
+      tabSize: 4,
+      chatModel: 'deepseek-r1:8b',
+    });
+    expect(useSettingsStore.getState().settings.fontSize).toBe(16);
+    expect(useSettingsStore.getState().settings.chatModel).toBe('deepseek-r1:8b');
+
+    // Modal state transitions
+    store.openModal();
+    expect(useSettingsStore.getState().isModalOpen).toBe(true);
+    store.closeModal();
+    expect(useSettingsStore.getState().isModalOpen).toBe(false);
+
+    // Onboarding wizard completion
+    expect(useSettingsStore.getState().settings.isFirstRun).toBe(true);
+    store.setFirstRunCompleted();
+    expect(useSettingsStore.getState().settings.isFirstRun).toBe(false);
+    expect(useSettingsStore.getState().isOnboardingOpen).toBe(false);
   });
 });
