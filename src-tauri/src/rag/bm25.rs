@@ -22,6 +22,15 @@ pub struct IndexSummary {
     pub index_duration_ms: u64,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct BM25IndexStatus {
+    pub is_indexed: bool,
+    pub indexed_files_count: usize,
+    pub total_tokens: usize,
+    pub unique_terms_count: usize,
+    pub last_updated_ms: u64,
+}
+
 #[derive(Clone, Debug)]
 pub struct IndexedDocument {
     pub id: usize,
@@ -44,12 +53,20 @@ pub struct BM25Index {
     pub avg_doc_len: f64,
     pub k1: f64,
     pub b: f64,
+    pub last_updated_ms: u64,
 }
 
 pub type BM25IndexState = Arc<RwLock<Option<BM25Index>>>;
 
 pub fn create_bm25_state() -> BM25IndexState {
     Arc::new(RwLock::new(None))
+}
+
+fn current_timestamp_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 /// Tokenizes code text into searchable terms.
@@ -88,7 +105,6 @@ pub fn tokenize_code(text: &str) -> Vec<String> {
         for i in 0..chars.len() {
             let ch = chars[i];
             if ch.is_uppercase() && !current_subword.is_empty() {
-                // If previous was lowercase or next is lowercase, break
                 let prev_is_lower = chars[i - 1].is_lowercase();
                 let next_is_lower = if i + 1 < chars.len() {
                     chars[i + 1].is_lowercase()
@@ -128,6 +144,7 @@ impl BM25Index {
             avg_doc_len: 0.0,
             k1: 1.2,
             b: 0.75,
+            last_updated_ms: current_timestamp_ms(),
         }
     }
 
@@ -169,22 +186,191 @@ impl BM25Index {
         }
     }
 
+    /// Incrementally updates an existing document in place or appends a new one
+    pub fn update_or_add_document(&mut self, file_path: &str, content: &str) {
+        if let Some(existing_idx) = self.docs.iter().position(|d| d.file_path == file_path) {
+            let doc_id = self.docs[existing_idx].id;
+            // 1. Purge existing postings for this doc_id
+            for postings in self.term_dict.values_mut() {
+                postings.retain(|p| p.doc_id != doc_id);
+            }
+            self.term_dict.retain(|_, postings| !postings.is_empty());
+
+            // 2. Tokenize new content
+            let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+            let mut term_freqs: HashMap<String, (usize, Vec<usize>)> = HashMap::new();
+            let mut total_doc_tokens = 0;
+
+            for (line_idx, line) in lines.iter().enumerate() {
+                let line_num = line_idx + 1;
+                let tokens = tokenize_code(line);
+                total_doc_tokens += tokens.len();
+
+                for token in tokens {
+                    let entry = term_freqs.entry(token).or_insert((0, Vec::new()));
+                    entry.0 += 1;
+                    if !entry.1.contains(&line_num) {
+                        entry.1.push(line_num);
+                    }
+                }
+            }
+
+            self.docs[existing_idx].lines = lines;
+            self.docs[existing_idx].token_count = total_doc_tokens;
+
+            for (term, (freq, line_numbers)) in term_freqs {
+                let postings = self.term_dict.entry(term).or_insert_with(Vec::new);
+                postings.push(Posting {
+                    doc_id,
+                    frequency: freq,
+                    line_occurrences: line_numbers,
+                });
+            }
+
+            self.finalize();
+        } else if let Some(tombstone_idx) = self.docs.iter().position(|d| d.file_path.is_empty()) {
+            // Reuse tombstone slot
+            let doc_id = self.docs[tombstone_idx].id;
+            let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+            let mut term_freqs: HashMap<String, (usize, Vec<usize>)> = HashMap::new();
+            let mut total_doc_tokens = 0;
+
+            for (line_idx, line) in lines.iter().enumerate() {
+                let line_num = line_idx + 1;
+                let tokens = tokenize_code(line);
+                total_doc_tokens += tokens.len();
+
+                for token in tokens {
+                    let entry = term_freqs.entry(token).or_insert((0, Vec::new()));
+                    entry.0 += 1;
+                    if !entry.1.contains(&line_num) {
+                        entry.1.push(line_num);
+                    }
+                }
+            }
+
+            self.docs[tombstone_idx].file_path = file_path.to_string();
+            self.docs[tombstone_idx].lines = lines;
+            self.docs[tombstone_idx].token_count = total_doc_tokens;
+
+            for (term, (freq, line_numbers)) in term_freqs {
+                let postings = self.term_dict.entry(term).or_insert_with(Vec::new);
+                postings.push(Posting {
+                    doc_id,
+                    frequency: freq,
+                    line_occurrences: line_numbers,
+                });
+            }
+
+            self.finalize();
+        } else {
+            self.add_document(file_path, content);
+            self.finalize();
+        }
+    }
+
+    /// Removes a document from the index by clearing its entry and purging postings
+    pub fn remove_document(&mut self, file_path: &str) {
+        if let Some(existing_idx) = self.docs.iter().position(|d| d.file_path == file_path) {
+            let doc_id = self.docs[existing_idx].id;
+            for postings in self.term_dict.values_mut() {
+                postings.retain(|p| p.doc_id != doc_id);
+            }
+            self.term_dict.retain(|_, postings| !postings.is_empty());
+
+            // Tombstone this document slot to preserve doc_id alignment
+            self.docs[existing_idx].file_path.clear();
+            self.docs[existing_idx].lines.clear();
+            self.docs[existing_idx].token_count = 0;
+
+            self.finalize();
+        }
+    }
+
+    /// Synchronizes a batch of file changes from the file watcher incrementally
+    pub fn sync_file_changes(
+        &mut self,
+        workspace_root: &str,
+        paths: &[String],
+    ) -> Result<IndexSummary, String> {
+        let start_time = Instant::now();
+        let root = Path::new(workspace_root);
+        let target_extensions = [
+            "ts", "tsx", "js", "jsx", "rs", "py", "json", "toml", "yaml", "md", "html", "css",
+        ];
+
+        for path_str in paths {
+            if path_str.contains("node_modules")
+                || path_str.contains("target")
+                || path_str.contains(".git")
+                || path_str.contains("dist")
+            {
+                continue;
+            }
+
+            let path = Path::new(path_str);
+            let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+            if !target_extensions.contains(&ext.to_lowercase().as_str()) {
+                continue;
+            }
+
+            let full_path = if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                root.join(path)
+            };
+
+            let rel_path = full_path
+                .strip_prefix(root)
+                .unwrap_or(&full_path)
+                .to_string_lossy()
+                .replace('\\', "/");
+
+            if full_path.exists() && full_path.is_file() {
+                if let Ok(content) = std::fs::read_to_string(&full_path) {
+                    self.update_or_add_document(&rel_path, &content);
+                }
+            } else {
+                self.remove_document(&rel_path);
+            }
+        }
+
+        let active_docs: Vec<&IndexedDocument> =
+            self.docs.iter().filter(|d| !d.file_path.is_empty()).collect();
+        let total_tokens: usize = active_docs.iter().map(|d| d.token_count).sum();
+        let unique_terms = self.term_dict.len();
+        let duration = start_time.elapsed().as_millis() as u64;
+
+        Ok(IndexSummary {
+            indexed_files_count: active_docs.len(),
+            total_tokens,
+            unique_terms_count: unique_terms,
+            index_duration_ms: duration,
+        })
+    }
+
     pub fn finalize(&mut self) {
-        if self.docs.is_empty() {
+        let active_docs: Vec<&IndexedDocument> =
+            self.docs.iter().filter(|d| !d.file_path.is_empty()).collect();
+        if active_docs.is_empty() {
             self.avg_doc_len = 0.0;
+            self.last_updated_ms = current_timestamp_ms();
             return;
         }
-        let total_tokens: usize = self.docs.iter().map(|d| d.token_count).sum();
-        self.avg_doc_len = total_tokens as f64 / self.docs.len() as f64;
+        let total_tokens: usize = active_docs.iter().map(|d| d.token_count).sum();
+        self.avg_doc_len = total_tokens as f64 / active_docs.len() as f64;
+        self.last_updated_ms = current_timestamp_ms();
     }
 
     pub fn search(&self, query: &str, limit: usize) -> Vec<BM25SearchResult> {
         let query_terms = tokenize_code(query);
-        if query_terms.is_empty() || self.docs.is_empty() {
+        let active_docs: Vec<&IndexedDocument> =
+            self.docs.iter().filter(|d| !d.file_path.is_empty()).collect();
+        if query_terms.is_empty() || active_docs.is_empty() {
             return Vec::new();
         }
 
-        let num_docs = self.docs.len() as f64;
+        let num_docs = active_docs.len() as f64;
         let mut scores: HashMap<usize, (f64, HashSet<usize>, Vec<String>)> = HashMap::new();
 
         for term in &query_terms {
@@ -195,6 +381,10 @@ impl BM25Index {
 
                 for posting in postings {
                     let doc = &self.docs[posting.doc_id];
+                    if doc.file_path.is_empty() {
+                        continue;
+                    }
+
                     let tf = posting.frequency as f64;
                     let doc_len = doc.token_count as f64;
 
@@ -326,7 +516,9 @@ pub fn build_index_from_workspace(
 
     index.finalize();
 
-    let total_tokens: usize = index.docs.iter().map(|d| d.token_count).sum();
+    let active_docs: Vec<&IndexedDocument> =
+        index.docs.iter().filter(|d| !d.file_path.is_empty()).collect();
+    let total_tokens: usize = active_docs.iter().map(|d| d.token_count).sum();
     let unique_terms = index.term_dict.len();
     let duration = start_time.elapsed().as_millis() as u64;
 
@@ -371,6 +563,49 @@ pub async fn search_bm25(
         Ok(index.search(&query, max_results))
     } else {
         Err("BM25 index has not been built yet. Call build_bm25_index first.".to_string())
+    }
+}
+
+#[tauri::command]
+pub async fn sync_bm25_file_changes(
+    state: tauri::State<'_, BM25IndexState>,
+    workspace_root: String,
+    paths: Vec<String>,
+) -> Result<IndexSummary, String> {
+    let mut lock = state.write().await;
+    if let Some(index) = lock.as_mut() {
+        index.sync_file_changes(&workspace_root, &paths)
+    } else {
+        let (index, summary) = build_index_from_workspace(&workspace_root, 200)?;
+        *lock = Some(index);
+        Ok(summary)
+    }
+}
+
+#[tauri::command]
+pub async fn get_bm25_index_status(
+    state: tauri::State<'_, BM25IndexState>,
+) -> Result<BM25IndexStatus, String> {
+    let lock = state.read().await;
+    if let Some(index) = lock.as_ref() {
+        let active_docs: Vec<&IndexedDocument> =
+            index.docs.iter().filter(|d| !d.file_path.is_empty()).collect();
+        let total_tokens = active_docs.iter().map(|d| d.token_count).sum();
+        Ok(BM25IndexStatus {
+            is_indexed: !active_docs.is_empty(),
+            indexed_files_count: active_docs.len(),
+            total_tokens,
+            unique_terms_count: index.term_dict.len(),
+            last_updated_ms: index.last_updated_ms,
+        })
+    } else {
+        Ok(BM25IndexStatus {
+            is_indexed: false,
+            indexed_files_count: 0,
+            total_tokens: 0,
+            unique_terms_count: 0,
+            last_updated_ms: 0,
+        })
     }
 }
 
@@ -424,7 +659,6 @@ pub mod tests {
 
         let results = index.search("compute", 5);
         assert_eq!(results.len(), 2);
-        // doc2 mentions compute twice, should have higher or equal score
         assert!(results[0].score >= results[1].score);
     }
 
@@ -442,5 +676,48 @@ pub mod tests {
         assert!(snippet.contains(">    4 | target match here"));
         assert!(snippet.contains("line 3"));
         assert!(snippet.contains("line 5"));
+    }
+
+    #[test]
+    fn test_incremental_update_document() {
+        let mut index = BM25Index::new();
+        index.add_document("src/app.ts", "export const appMode = 'production';");
+        index.finalize();
+
+        // Query before update
+        let res1 = index.search("production", 5);
+        assert_eq!(res1.len(), 1);
+        assert_eq!(res1[0].file_path, "src/app.ts");
+
+        // Incrementally update src/app.ts with new symbol 'development'
+        index.update_or_add_document("src/app.ts", "export const appMode = 'development';");
+
+        // Previous term should yield 0 results
+        let res_old = index.search("production", 5);
+        assert_eq!(res_old.len(), 0);
+
+        // New term should yield 1 result
+        let res_new = index.search("development", 5);
+        assert_eq!(res_new.len(), 1);
+        assert_eq!(res_new[0].file_path, "src/app.ts");
+    }
+
+    #[test]
+    fn test_incremental_remove_document() {
+        let mut index = BM25Index::new();
+        index.add_document("src/delete_me.ts", "export function obsoleteFunction() {}");
+        index.finalize();
+
+        let res = index.search("obsoleteFunction", 5);
+        assert_eq!(res.len(), 1);
+
+        index.remove_document("src/delete_me.ts");
+
+        let res_after = index.search("obsoleteFunction", 5);
+        assert_eq!(res_after.len(), 0);
+
+        let active_docs: Vec<&IndexedDocument> =
+            index.docs.iter().filter(|d| !d.file_path.is_empty()).collect();
+        assert_eq!(active_docs.len(), 0);
     }
 }

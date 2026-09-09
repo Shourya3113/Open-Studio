@@ -10,7 +10,8 @@ import {
   Code2, 
   Zap,
   History,
-  AlertCircle
+  AlertCircle,
+  Database
 } from 'lucide-react';
 import { AppSystemInfo } from './types/system';
 import { InferenceHealth } from './types/inference';
@@ -33,6 +34,8 @@ import { createDefaultCommands } from './features/palette/defaultCommands';
 import { useEditorStore } from './stores/editorStore';
 import { useChatStore } from './stores/chatStore';
 import { useDiagnosticsStore } from './stores/diagnosticsStore';
+import { useIndexStore } from './stores/indexStore';
+import { initIndexWatcher, formatIndexStatusLabel } from './features/rag/indexSync';
 import { 
   loadWorkspaceState, 
   rehydrateWorkspace, 
@@ -104,6 +107,20 @@ export default function App() {
   const [isHardwareModalOpen, setIsHardwareModalOpen] = useState(false);
   const [isCheckpointModalOpen, setIsCheckpointModalOpen] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
+
+  const indexStatus = useIndexStore((s) => s.status);
+  const isIndexSyncing = useIndexStore((s) => s.isSyncing);
+
+  // Initialize Codebase Index Watcher
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    initIndexWatcher('.').then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
 
   const { openFile, buffers, activeBufferId } = useEditorStore();
   const activeBuffer = activeBufferId ? buffers[activeBufferId] : null;
@@ -611,6 +628,20 @@ export default function App() {
           )}
         </div>
         <div className="flex items-center gap-4">
+          <button 
+            onClick={() => useIndexStore.getState().reindexWorkspace('.')}
+            disabled={isIndexSyncing}
+            className="flex items-center gap-1.5 cursor-pointer hover:bg-ide-hover px-1.5 py-0.5 rounded transition text-left" 
+            title="Codebase Index: BM25 Lexical & AST Skeletons. Click to re-index workspace."
+          >
+            <Database 
+              size={12} 
+              className={isIndexSyncing ? 'text-amber-400 animate-spin' : indexStatus.is_indexed ? 'text-emerald-400' : 'text-ide-textMuted'} 
+            />
+            <span className="font-mono text-[10px] text-ide-textMuted hover:text-ide-textBright">
+              {formatIndexStatusLabel(indexStatus, isIndexSyncing)}
+            </span>
+          </button>
           <button 
             onClick={() => setIsHardwareModalOpen(true)}
             className="flex items-center gap-1.5 cursor-pointer hover:bg-ide-hover px-1.5 py-0.5 rounded transition text-left" 

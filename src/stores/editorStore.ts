@@ -127,6 +127,24 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   saveFile: (id: string) => {
+    const targetBuffer = get().buffers[id];
+    if (targetBuffer) {
+      import('@tauri-apps/api/core')
+        .then(({ invoke }) => {
+          invoke('write_file_content', {
+            path: targetBuffer.filePath,
+            content: targetBuffer.content,
+          }).catch(() => {});
+        })
+        .catch(() => {});
+
+      import('../features/rag/indexSync')
+        .then(({ syncSavedFileImmediately }) => {
+          syncSavedFileImmediately(targetBuffer.filePath).catch(() => {});
+        })
+        .catch(() => {});
+    }
+
     set((state) => {
       const buffer = state.buffers[id];
       if (!buffer) return state;
