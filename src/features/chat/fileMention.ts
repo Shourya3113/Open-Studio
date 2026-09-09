@@ -68,6 +68,12 @@ export function flattenFileTree(rootNode: FileNode, rootPath?: string): Workspac
   return items;
 }
 
+export const SPECIAL_MENTION_REPO: WorkspaceFileItem = {
+  name: '@repo (Workspace Structural Skeleton)',
+  path: '__repo_skeleton__',
+  relPath: 'repo',
+};
+
 /**
  * Performs fuzzy / substring search across workspace files.
  * Prioritizes exact filename matches, followed by prefix matches and substring path matches.
@@ -78,8 +84,11 @@ export function searchWorkspaceFiles(
   limit = 8
 ): WorkspaceFileItem[] {
   const q = query.toLowerCase().trim();
+  const includeRepo = !q || 'repo'.includes(q) || 'skeleton'.includes(q) || 'codebase'.includes(q);
+  const extraItems: WorkspaceFileItem[] = includeRepo ? [SPECIAL_MENTION_REPO] : [];
+
   if (!q) {
-    return files.slice(0, limit);
+    return [...extraItems, ...files.slice(0, limit - extraItems.length)];
   }
 
   const scored = files.map((file) => {

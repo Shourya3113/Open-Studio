@@ -79,4 +79,16 @@ describe('ChatML Prompt Builder', () => {
     expect(CHATML_STOP_TOKENS).toContain('<|im_end|>');
     expect(CHATML_STOP_TOKENS).toContain('<|endoftext|>');
   });
+
+  it('detects @repo tag and augments system prompt with structural skeleton', async () => {
+    const { augmentPromptWithRepoContext } = await import('./promptBuilder');
+
+    const resultWithout = await augmentPromptWithRepoContext('How do I use this library?');
+    expect(resultWithout.hasRepoContext).toBe(false);
+    expect(resultWithout.systemPrompt).not.toContain('REPOSITORY STRUCTURAL SKELETON MAP');
+
+    const resultWith = await augmentPromptWithRepoContext('Explain the architecture in @repo');
+    expect(resultWith.hasRepoContext).toBe(true);
+    expect(resultWith.systemPrompt).toContain('REPOSITORY STRUCTURAL SKELETON MAP');
+  });
 });

@@ -16,6 +16,9 @@ interface FileMentionDropdownProps {
 }
 
 function getFileIcon(fileName: string) {
+  if (fileName.includes('@repo') || fileName.includes('Skeleton')) {
+    return <AtSign size={13} className="text-emerald-400 flex-shrink-0" />;
+  }
   const ext = fileName.split('.').pop()?.toLowerCase();
   switch (ext) {
     case 'ts':

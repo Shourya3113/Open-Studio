@@ -50,3 +50,22 @@ export function buildChatMLPrompt(
 
   return parts.join('\n');
 }
+
+/**
+ * Injects repository structural skeleton if @repo or @skeleton token is detected
+ */
+export async function augmentPromptWithRepoContext(
+  userQuery: string,
+  baseSystemPrompt: string = DEFAULT_SYSTEM_PROMPT
+): Promise<{ systemPrompt: string; hasRepoContext: boolean }> {
+  const hasRepoTag = /@repo\b|@skeleton\b|@codebase\b/i.test(userQuery);
+  if (!hasRepoTag) {
+    return { systemPrompt: baseSystemPrompt, hasRepoContext: false };
+  }
+
+  const { getRepoSkeleton } = await import('../ast/repoMap');
+  const skeleton = await getRepoSkeleton('.');
+
+  const augmented = `${baseSystemPrompt}\n\n${skeleton.composite_prompt}`;
+  return { systemPrompt: augmented, hasRepoContext: true };
+}

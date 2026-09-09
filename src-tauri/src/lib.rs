@@ -4,6 +4,7 @@ pub mod terminal;
 pub mod inference;
 pub mod diff;
 pub mod git;
+pub mod ast;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -35,7 +36,9 @@ pub fn run() {
             diff::apply_frugal_diff,
             git::create_checkpoint,
             git::list_checkpoints,
-            git::restore_checkpoint
+            git::restore_checkpoint,
+            ast::slicer::slice_file_ast,
+            ast::slicer::generate_repo_skeleton
         ])
         .run(tauri::generate_context!())
         .expect("error while running Open Studio");
