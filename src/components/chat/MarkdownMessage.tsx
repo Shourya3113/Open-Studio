@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Copy, Check, ArrowDownToLine, Code2, AtSign } from 'lucide-react';
+import { Copy, Check, ArrowDownToLine, Code2, AtSign, GitCompare } from 'lucide-react';
 import { useEditorStore } from '../../stores/editorStore';
+import { useDiffReviewStore } from '../../stores/diffReviewStore';
+import { parseFrugalDiffClient } from '../../features/diff/frugalDiff';
 
 interface MarkdownMessageProps {
   content: string;
@@ -83,8 +85,15 @@ export function parseMarkdownParts(markdown: string): ContentPart[] {
 const CodeBlock: React.FC<{ language: string; code: string }> = ({ language, code }) => {
   const [copied, setCopied] = useState(false);
   const [inserted, setInserted] = useState(false);
+  const [isOpeningDiff, setIsOpeningDiff] = useState(false);
   const insertTextAtCursor = useEditorStore((s) => s.insertTextAtCursor);
   const activeBufferId = useEditorStore((s) => s.activeBufferId);
+
+  const isDiff =
+    (language === 'diff' || code.includes('<<<<<<< SEARCH')) &&
+    code.includes('>>>>>>> REPLACE');
+  const parsedDiffs = isDiff ? parseFrugalDiffClient(code) : [];
+  const totalHunks = parsedDiffs.reduce((acc, d) => acc + d.hunks.length, 0);
 
   const handleCopy = async () => {
     try {
@@ -102,16 +111,74 @@ const CodeBlock: React.FC<{ language: string; code: string }> = ({ language, cod
     setTimeout(() => setInserted(false), 2000);
   };
 
+  const handleApplyToEditor = async () => {
+    if (parsedDiffs.length === 0) return;
+
+    setIsOpeningDiff(true);
+    try {
+      const editorStore = useEditorStore.getState();
+      const activeBuf = editorStore.activeBufferId
+        ? editorStore.buffers[editorStore.activeBufferId]
+        : null;
+
+      // Map untitled paths to active editor buffer if available
+      const resolvedDiffs = parsedDiffs.map((d) => {
+        if ((d.filePath === 'untitled' || !d.filePath) && activeBuf) {
+          return { ...d, filePath: activeBuf.filePath };
+        }
+        return d;
+      });
+
+      await useDiffReviewStore.getState().openReview(resolvedDiffs);
+    } finally {
+      setIsOpeningDiff(false);
+    }
+  };
+
   return (
-    <div className="my-2.5 rounded-md border border-ide-border/80 bg-ide-bg overflow-hidden shadow-sm">
+    <div className={`my-2.5 rounded-md border overflow-hidden shadow-sm ${
+      isDiff ? 'border-blue-900/60 bg-ide-bg' : 'border-ide-border/80 bg-ide-bg'
+    }`}>
       {/* Code Header Bar */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-ide-activityBar border-b border-ide-border/60 text-[11px] select-none">
-        <div className="flex items-center gap-1.5 text-ide-textMuted font-mono lowercase">
-          <Code2 size={13} className="text-ide-accent" />
-          <span>{language || 'code'}</span>
+      <div className={`flex items-center justify-between px-3 py-1.5 border-b text-[11px] select-none ${
+        isDiff
+          ? 'bg-blue-950/40 border-blue-900/50'
+          : 'bg-ide-activityBar border-ide-border/60'
+      }`}>
+        <div className="flex items-center gap-1.5 font-mono lowercase">
+          {isDiff ? (
+            <div className="flex items-center gap-1.5 text-blue-400">
+              <GitCompare size={13} className="text-blue-400" />
+              <span className="font-semibold uppercase tracking-wider text-[10px]">Diff</span>
+              {parsedDiffs[0]?.filePath && parsedDiffs[0].filePath !== 'untitled' && (
+                <span className="text-ide-textMuted text-[10.5px]">({parsedDiffs[0].filePath})</span>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-ide-textMuted">
+              <Code2 size={13} className="text-ide-accent" />
+              <span>{language || 'code'}</span>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-1.5">
-          {activeBufferId && (
+          {/* Apply to Editor CTA button for diff blocks */}
+          {isDiff && totalHunks > 0 && (
+            <button
+              onClick={handleApplyToEditor}
+              disabled={isOpeningDiff}
+              className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium text-[10.5px] transition shadow-xs cursor-pointer mr-1 disabled:opacity-50"
+              title="Review and apply this diff hunk-by-hunk in Monaco Editor"
+            >
+              <GitCompare size={12} />
+              <span>{isOpeningDiff ? 'Opening...' : 'Apply to Editor'}</span>
+              <span className="bg-blue-800/80 px-1 py-0.2 rounded text-[9.5px] font-mono">
+                {totalHunks} {totalHunks === 1 ? 'hunk' : 'hunks'}
+              </span>
+            </button>
+          )}
+
+          {activeBufferId && !isDiff && (
             <button
               onClick={handleInsert}
               className="flex items-center gap-1 px-1.5 py-0.5 rounded text-ide-textMuted hover:text-ide-textBright hover:bg-ide-hover transition"
