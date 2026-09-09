@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { 
   Files, 
   Search, 
@@ -25,6 +25,7 @@ import { DiffReviewModal } from './components/diff/DiffReviewModal';
 import { CheckpointModal } from './components/git/CheckpointModal';
 import { useEditorStore } from './stores/editorStore';
 import { useChatStore } from './stores/chatStore';
+import { loadWorkspaceState, rehydrateWorkspace, initWorkspacePersistence } from './stores/persistence';
 
 const SAMPLE_WELCOME_TS = `// Open Studio: Local AI IDE & Agentic Workspace
 // Day 2: Monaco Editor Core & Offline Bundling Verified
@@ -189,11 +190,58 @@ export default function App() {
     window.addEventListener('mouseup', onMouseUp);
   };
 
+  const layoutRef = useRef({
+    sidebarWidth,
+    bottomPanelHeight,
+    isSidebarOpen,
+    isBottomPanelOpen,
+    activeTab,
+  });
+
   useEffect(() => {
-    // Seed initial files into editor store
-    openFile('src/welcome.ts', SAMPLE_WELCOME_TS, 'typescript');
-    openFile('README.md', SAMPLE_README_MD, 'markdown');
-    openFile('src-tauri/src/main.rs', SAMPLE_MAIN_RS, 'rust');
+    layoutRef.current = {
+      sidebarWidth,
+      bottomPanelHeight,
+      isSidebarOpen,
+      isBottomPanelOpen,
+      activeTab,
+    };
+  }, [sidebarWidth, bottomPanelHeight, isSidebarOpen, isBottomPanelOpen, activeTab]);
+
+  useEffect(() => {
+    let unsubPersistence: (() => void) | undefined;
+
+    async function initWorkspace() {
+      try {
+        const persisted = await loadWorkspaceState();
+        if (persisted && persisted.openFiles && persisted.openFiles.length > 0) {
+          const { layout } = await rehydrateWorkspace(persisted);
+          if (layout) {
+            setSidebarWidth(layout.sidebarWidth || 260);
+            setBottomPanelHeight(layout.bottomPanelHeight || 220);
+            setIsSidebarOpen(layout.isSidebarOpen ?? true);
+            setIsBottomPanelOpen(layout.isBottomPanelOpen ?? false);
+            setActiveTab(layout.activeTab || 'files');
+          }
+        } else {
+          // Fresh workspace fallback
+          openFile('src/welcome.ts', SAMPLE_WELCOME_TS, 'typescript');
+          openFile('README.md', SAMPLE_README_MD, 'markdown');
+          openFile('src-tauri/src/main.rs', SAMPLE_MAIN_RS, 'rust');
+        }
+      } catch {
+        openFile('src/welcome.ts', SAMPLE_WELCOME_TS, 'typescript');
+        openFile('README.md', SAMPLE_README_MD, 'markdown');
+        openFile('src-tauri/src/main.rs', SAMPLE_MAIN_RS, 'rust');
+      }
+
+      unsubPersistence = initWorkspacePersistence({
+        debounceMs: 500,
+        getLayout: () => layoutRef.current,
+      });
+    }
+
+    initWorkspace();
 
     async function fetchSysInfo() {
       try {
@@ -210,6 +258,10 @@ export default function App() {
       }
     }
     fetchSysInfo();
+
+    return () => {
+      if (unsubPersistence) unsubPersistence();
+    };
   }, []);
 
   return (

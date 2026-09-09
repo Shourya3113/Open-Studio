@@ -9,6 +9,8 @@ interface EditorState {
   splitDirection: SplitDirection;
   savedSnapshots: Record<string, string>;
 
+  recentFiles: string[];
+
   // Actions
   openFile: (filePath: string, content?: string, language?: string) => string;
   closeFile: (id: string) => void;
@@ -20,6 +22,7 @@ interface EditorState {
   updateCursor: (id: string, line: number, column: number) => void;
   insertTextAtCursor: (text: string) => void;
   updateFileContentByPath: (filePath: string, content: string) => void;
+  setRecentFiles: (files: string[]) => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -29,6 +32,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   splitActiveBufferId: null,
   splitDirection: 'none',
   savedSnapshots: {},
+  recentFiles: [],
 
   openFile: (filePath: string, content = '', language?: string) => {
     const { buffers } = get();
@@ -36,7 +40,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     // Check if buffer with this path already exists
     const existingId = Object.keys(buffers).find((id) => buffers[id].filePath === filePath);
     if (existingId) {
-      set({ activeBufferId: existingId });
+      set((state) => ({
+        activeBufferId: existingId,
+        recentFiles: [filePath, ...state.recentFiles.filter((p) => p !== filePath)].slice(0, 20),
+      }));
       return existingId;
     }
 
@@ -59,6 +66,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       openBufferIds: [...state.openBufferIds, id],
       activeBufferId: id,
       savedSnapshots: { ...state.savedSnapshots, [id]: content },
+      recentFiles: [filePath, ...state.recentFiles.filter((p) => p !== filePath)].slice(0, 20),
     }));
 
     return id;
@@ -218,5 +226,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         },
       }));
     }
+  },
+
+  setRecentFiles: (files: string[]) => {
+    set({ recentFiles: files.slice(0, 20) });
   },
 }));
