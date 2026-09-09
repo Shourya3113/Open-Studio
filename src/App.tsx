@@ -23,9 +23,18 @@ import { TerminalPanel } from './components/terminal/TerminalPanel';
 import { ChatPanel } from './components/chat/ChatPanel';
 import { DiffReviewModal } from './components/diff/DiffReviewModal';
 import { CheckpointModal } from './components/git/CheckpointModal';
+import { CommandPalette } from './components/palette/CommandPalette';
+import { usePaletteStore } from './stores/paletteStore';
+import { createDefaultCommands } from './features/palette/defaultCommands';
 import { useEditorStore } from './stores/editorStore';
 import { useChatStore } from './stores/chatStore';
-import { loadWorkspaceState, rehydrateWorkspace, initWorkspacePersistence } from './stores/persistence';
+import { 
+  loadWorkspaceState, 
+  rehydrateWorkspace, 
+  initWorkspacePersistence,
+  extractCurrentWorkspaceState,
+  saveWorkspaceState 
+} from './stores/persistence';
 
 const SAMPLE_WELCOME_TS = `// Open Studio: Local AI IDE & Agentic Workspace
 // Day 2: Monaco Editor Core & Offline Bundling Verified
@@ -133,15 +142,72 @@ export default function App() {
     };
   }, [refreshInferenceTelemetry]);
 
-  // Global IDE shortcuts: Ctrl+` (Terminal), Ctrl+B (Sidebar)
+  // Register default IDE commands for Command Palette
+  useEffect(() => {
+    const unregister = usePaletteStore.getState().registerCommands(
+      createDefaultCommands({
+        toggleSidebar: () => setIsSidebarOpen((prev) => !prev),
+        toggleTerminal: () => setIsBottomPanelOpen((prev) => !prev),
+        setActiveTab: (tab) => {
+          setActiveTab(tab);
+          setIsSidebarOpen(true);
+        },
+        openHardwareModal: () => setIsHardwareModalOpen(true),
+        openCheckpointModal: () => setIsCheckpointModalOpen(true),
+        saveWorkspace: () => {
+          const state = extractCurrentWorkspaceState({
+            sidebarWidth,
+            bottomPanelHeight,
+            isSidebarOpen,
+            isBottomPanelOpen,
+            activeTab,
+          });
+          saveWorkspaceState(state);
+        },
+        resetLayout: () => {
+          setSidebarWidth(260);
+          setBottomPanelHeight(220);
+          setIsSidebarOpen(true);
+          setIsBottomPanelOpen(false);
+          setActiveTab('files');
+        },
+      })
+    );
+    return unregister;
+  }, [sidebarWidth, bottomPanelHeight, isSidebarOpen, isBottomPanelOpen, activeTab]);
+
+  // Global IDE shortcuts: Ctrl+Shift+P / F1 (Commands), Ctrl+P (Quick Open), Ctrl+` (Terminal), Ctrl+B (Sidebar)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Command Palette (Commands mode): Ctrl+Shift+P, Cmd+Shift+P, F1
+      if (
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'p') ||
+        e.key === 'F1'
+      ) {
+        e.preventDefault();
+        usePaletteStore.getState().open('commands');
+        return;
+      }
+
+      // Command Palette (Quick Open Files mode): Ctrl+P, Cmd+P
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        usePaletteStore.getState().open('files');
+        return;
+      }
+
+      // Toggle integrated terminal: Ctrl+`
       if ((e.ctrlKey || e.metaKey) && e.key === '`') {
         e.preventDefault();
-        setIsBottomPanelOpen(prev => !prev);
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        setIsBottomPanelOpen((prev) => !prev);
+        return;
+      }
+
+      // Toggle primary sidebar: Ctrl+B
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
         e.preventDefault();
-        setIsSidebarOpen(prev => !prev);
+        setIsSidebarOpen((prev) => !prev);
+        return;
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -273,6 +339,21 @@ export default function App() {
           <span className="font-semibold text-ide-textBright">Open Studio</span>
           <span className="text-ide-textMuted">— {activeBuffer ? activeBuffer.fileName : 'Workspace'}</span>
         </div>
+
+        {/* Centered Command Palette Trigger */}
+        <button
+          onClick={() => usePaletteStore.getState().open('files')}
+          className="flex items-center gap-2 px-3 py-1 bg-ide-bg/80 hover:bg-ide-hover text-ide-textMuted hover:text-ide-textBright border border-ide-border/60 rounded-md transition text-xs shadow-inner cursor-pointer"
+          title="Open Command Palette (Ctrl+P for files, Ctrl+Shift+P for commands)"
+          data-testid="titlebar-palette-trigger"
+        >
+          <Search size={12} className="text-ide-textMuted" />
+          <span className="text-[11px] hidden sm:inline">Search commands or files...</span>
+          <kbd className="px-1 py-0.2 bg-ide-surface rounded border border-ide-border/80 text-[10px] font-mono text-ide-textMuted">
+            Ctrl+P
+          </kbd>
+        </button>
+
         <div className="flex items-center gap-3 text-ide-textMuted">
           <span className="flex items-center gap-1">
             <Zap size={13} className="text-amber-400" />
@@ -503,6 +584,9 @@ export default function App() {
         isOpen={isCheckpointModalOpen}
         onClose={() => setIsCheckpointModalOpen(false)}
       />
+
+      {/* Command Palette & Quick Open Modal */}
+      <CommandPalette />
     </div>
   );
 }
