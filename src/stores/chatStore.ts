@@ -3,7 +3,8 @@ import {
   ChatMessage, 
   buildChatMLPrompt, 
   CHATML_STOP_TOKENS, 
-  DEFAULT_SYSTEM_PROMPT 
+  DEFAULT_SYSTEM_PROMPT,
+  augmentPromptWithContext
 } from '../features/chat/promptBuilder';
 import { 
   extractFileMentions, 
@@ -86,10 +87,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }
 
+    // Hybrid codebase context augmentation (@codebase, @repo, @search)
+    const editorState = useEditorStore.getState();
+    const activeFile = editorState.activeBufferId ? editorState.buffers[editorState.activeBufferId]?.filePath : undefined;
+    const openFilesList = Object.values(editorState.buffers).map((b) => b.filePath);
+
+    const { systemPrompt: augmentedSystemPrompt, contextSummary } = await augmentPromptWithContext(
+      trimmed,
+      get().systemPrompt,
+      activeFile,
+      openFilesList
+    );
+
+    if (contextSummary) {
+      userMessage.contextSummary = contextSummary;
+      set((state) => ({
+        messages: state.messages.map((m) => (m.id === userMessage.id ? { ...m, contextSummary } : m)),
+      }));
+    }
+
     const messagesForPrompt = newMessages.map((m) =>
       m.id === userMessage.id ? { ...m, content: enrichedContent } : m
     );
-    const prompt = buildChatMLPrompt(messagesForPrompt, get().systemPrompt);
+    const prompt = buildChatMLPrompt(messagesForPrompt, augmentedSystemPrompt);
 
     try {
       const cancel = await streamCompletion(

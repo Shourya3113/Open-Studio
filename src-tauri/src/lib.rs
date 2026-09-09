@@ -42,7 +42,8 @@ pub fn run() {
             ast::slicer::slice_file_ast,
             ast::slicer::generate_repo_skeleton,
             rag::bm25::build_bm25_index,
-            rag::bm25::search_bm25
+            rag::bm25::search_bm25,
+            rag::aggregator::aggregate_codebase_context
         ])
         .run(tauri::generate_context!())
         .expect("error while running Open Studio");

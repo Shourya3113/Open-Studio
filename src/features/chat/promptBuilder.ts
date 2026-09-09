@@ -1,3 +1,5 @@
+import { InjectedContextSummary } from '../../types/context';
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -7,6 +9,7 @@ export interface ChatMessage {
   tokPerSec?: string;
   isStreaming?: boolean;
   error?: string;
+  contextSummary?: InjectedContextSummary;
 }
 
 export const CHATML_STOP_TOKENS = [
@@ -53,37 +56,76 @@ export function buildChatMLPrompt(
 
 /**
  * Injects repository structural skeleton (@repo) and/or BM25 lexical search snippets (@codebase)
+ * with multi-file relevance ranking and dynamic context budgeting.
  */
-export async function augmentPromptWithRepoContext(
+export async function augmentPromptWithContext(
   userQuery: string,
-  baseSystemPrompt: string = DEFAULT_SYSTEM_PROMPT
-): Promise<{ systemPrompt: string; hasRepoContext: boolean }> {
+  baseSystemPrompt: string = DEFAULT_SYSTEM_PROMPT,
+  activeFile?: string | null,
+  openFiles?: string[]
+): Promise<{
+  systemPrompt: string;
+  hasRepoContext: boolean;
+  contextSummary?: InjectedContextSummary;
+}> {
   const hasRepoTag = /@repo\b|@skeleton\b/i.test(userQuery);
   const hasCodebaseTag = /@codebase\b/i.test(userQuery);
+  const hasSearchTag = /@search\b/i.test(userQuery);
 
-  if (!hasRepoTag && !hasCodebaseTag) {
+  if (!hasRepoTag && !hasCodebaseTag && !hasSearchTag) {
     return { systemPrompt: baseSystemPrompt, hasRepoContext: false };
   }
 
   let augmented = baseSystemPrompt;
+  let contextSummary: InjectedContextSummary | undefined;
 
-  // Handle @codebase: BM25 lexical retrieval over workspace files
-  if (hasCodebaseTag) {
-    const { searchBM25, formatBM25ContextBlock } = await import('../rag/bm25Search');
-    const cleanQuery = userQuery.replace(/@codebase/gi, '').trim();
-    const results = await searchBM25(cleanQuery || 'main', 5);
-    const bm25Block = formatBM25ContextBlock(results);
-    if (bm25Block) {
-      augmented = `${augmented}\n\n${bm25Block}`;
+  const { aggregateContext, resultToSummary } = await import('../rag/contextAggregator');
+  const cleanQuery = userQuery.replace(/@(codebase|repo|skeleton|search)/gi, '').trim() || 'main';
+
+  const aggResult = await aggregateContext({
+    query: cleanQuery,
+    active_file: activeFile,
+    open_files: openFiles,
+    include_skeleton: hasRepoTag,
+    max_tokens: 3000,
+    max_snippets: 5,
+  });
+
+  contextSummary = resultToSummary(aggResult);
+
+  // If @codebase or @search was requested, inject BM25 formatted snippets
+  if (hasCodebaseTag || hasSearchTag) {
+    const { formatBM25ContextBlock } = await import('../rag/bm25Search');
+    const bm25CompatBlock = formatBM25ContextBlock(
+      aggResult.snippets.map((s) => ({
+        file_path: s.file_path,
+        score: s.score,
+        matching_lines: [s.line_number],
+        snippet: s.snippet,
+        matched_terms: s.matched_terms,
+      }))
+    );
+    if (bm25CompatBlock) {
+      augmented = `${augmented}\n\n${bm25CompatBlock}`;
     }
   }
 
-  // Handle @repo: Tree-sitter structural AST skeleton map
+  // If @repo was requested, inject Tree-sitter structural AST skeleton map
   if (hasRepoTag) {
     const { getRepoSkeleton } = await import('../ast/repoMap');
     const skeleton = await getRepoSkeleton('.');
     augmented = `${augmented}\n\n${skeleton.composite_prompt}`;
   }
 
-  return { systemPrompt: augmented, hasRepoContext: true };
+  return { systemPrompt: augmented, hasRepoContext: true, contextSummary };
+}
+
+/**
+ * Backwards-compatible wrapper for augmentPromptWithContext
+ */
+export async function augmentPromptWithRepoContext(
+  userQuery: string,
+  baseSystemPrompt: string = DEFAULT_SYSTEM_PROMPT
+): Promise<{ systemPrompt: string; hasRepoContext: boolean; contextSummary?: InjectedContextSummary }> {
+  return augmentPromptWithContext(userQuery, baseSystemPrompt);
 }

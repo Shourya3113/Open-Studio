@@ -173,6 +173,25 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({ bufferId }) => {
     };
   }, [bufferId, buffer?.filePath, buffer?.language]);
 
+  // Sync cursor position and reveal target line in center
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || !buffer?.cursorPosition) return;
+
+    const currentPos = editor.getPosition();
+    if (
+      !currentPos ||
+      currentPos.lineNumber !== buffer.cursorPosition.line ||
+      currentPos.column !== buffer.cursorPosition.column
+    ) {
+      editor.setPosition({
+        lineNumber: buffer.cursorPosition.line,
+        column: buffer.cursorPosition.column,
+      });
+      editor.revealLineInCenter(buffer.cursorPosition.line);
+    }
+  }, [bufferId, buffer?.cursorPosition?.line, buffer?.cursorPosition?.column]);
+
   return (
     <div className="h-full w-full relative overflow-hidden bg-ide-editor">
       <div 

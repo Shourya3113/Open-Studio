@@ -21,6 +21,7 @@ import {
   searchWorkspaceFiles 
 } from '../../features/chat/fileMention';
 import { FileMentionDropdown } from './FileMentionDropdown';
+import { ContextPillBar } from './ContextPillBar';
 import { FileNode } from '../../types/fs';
 
 interface ChatPanelProps {
@@ -324,6 +325,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ inferenceHealth }) => {
                       content={msg.content}
                       isStreaming={msg.isStreaming}
                     />
+                  )}
+
+                  {/* Multi-File Injected Context Pills */}
+                  {msg.contextSummary && (
+                    <ContextPillBar summary={msg.contextSummary} />
                   )}
 
                   {/* Error Notification */}
