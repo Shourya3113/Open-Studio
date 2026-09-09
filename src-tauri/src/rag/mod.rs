@@ -1,6 +1,7 @@
 pub mod bm25;
 pub mod aggregator;
 pub mod embeddings;
+pub mod vector_store;
 
 pub use bm25::{
     build_bm25_index, create_bm25_state, get_bm25_index_status, search_bm25,
@@ -17,4 +18,10 @@ pub use embeddings::{
     chunk_code_file, chunk_file_content, compute_cosine_similarity,
     compute_text_embedding, cosine_similarity, fetch_embedding, CodeChunk,
     EmbeddedChunk, DEFAULT_EMBEDDING_MODEL, EMBEDDING_DIMENSION,
+};
+
+pub use vector_store::{
+    create_vector_store_state, get_vector_store_status, index_workspace_vectors,
+    search_codebase_vectors, VectorIndexSummary, VectorSearchResult,
+    VectorStore, VectorStoreState, VectorStoreStatus,
 };

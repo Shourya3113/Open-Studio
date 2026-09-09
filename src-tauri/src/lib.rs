@@ -14,6 +14,7 @@ pub fn run() {
         .manage(terminal::pty::TerminalManager::new())
         .manage(inference::InferenceManager::default())
         .manage(rag::create_bm25_state())
+        .manage(rag::create_vector_store_state())
         .invoke_handler(tauri::generate_handler![
             commands::system::get_system_info,
             fs::read_workspace_tree,
@@ -48,7 +49,10 @@ pub fn run() {
             rag::aggregator::aggregate_codebase_context,
             rag::embeddings::chunk_file_content,
             rag::embeddings::compute_text_embedding,
-            rag::embeddings::compute_cosine_similarity
+            rag::embeddings::compute_cosine_similarity,
+            rag::vector_store::index_workspace_vectors,
+            rag::vector_store::search_codebase_vectors,
+            rag::vector_store::get_vector_store_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running Open Studio");
