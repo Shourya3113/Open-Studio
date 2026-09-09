@@ -12,6 +12,7 @@ export interface DefaultCommandsContext {
   openCheckpointModal: () => void;
   saveWorkspace?: () => void;
   resetLayout?: () => void;
+  openProblemsTab?: () => void;
 }
 
 export function createDefaultCommands(ctx: DefaultCommandsContext): PaletteCommand[] {
@@ -108,6 +109,18 @@ export function createDefaultCommands(ctx: DefaultCommandsContext): PaletteComma
       shortcut: 'Ctrl+`',
       keywords: ['terminal', 'console', 'pty', 'shell', 'bash', 'cmd', 'powershell', 'bottom'],
       handler: () => ctx.toggleTerminal(),
+    },
+    {
+      id: 'view:show-problems',
+      title: 'View: Show Problems & Diagnostics Panel',
+      category: 'View',
+      shortcut: 'Ctrl+Shift+M',
+      keywords: ['problems', 'errors', 'warnings', 'diagnostics', 'linter', 'compiler', 'markers'],
+      handler: () => {
+        if (ctx.openProblemsTab) {
+          ctx.openProblemsTab();
+        }
+      },
     },
     {
       id: 'nav:files',

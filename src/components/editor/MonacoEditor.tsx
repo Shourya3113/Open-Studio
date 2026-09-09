@@ -3,7 +3,9 @@ import * as monaco from 'monaco-editor';
 import './monacoWorkers';
 import { registerOpenStudioTheme, THEME_NAME } from './monacoTheme';
 import { registerInlineCompletionProvider } from '../../features/autocomplete/inlineProvider';
+import { bindModelDiagnostics } from '../../features/diagnostics/monacoBridge';
 import { useEditorStore } from '../../stores/editorStore';
+import { usePaletteStore } from '../../stores/paletteStore';
 
 interface MonacoEditorProps {
   bufferId: string | null;
@@ -82,6 +84,19 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({ bufferId }) => {
       setSplitDirection(currentSplit === 'vertical' ? 'none' : 'vertical');
     });
 
+    // Ctrl+Shift+P / F1: Command Palette
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyP, () => {
+      usePaletteStore.getState().open('commands');
+    });
+    editor.addCommand(monaco.KeyCode.F1, () => {
+      usePaletteStore.getState().open('commands');
+    });
+
+    // Ctrl+P: Quick Open Files
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyP, () => {
+      usePaletteStore.getState().open('files');
+    });
+
     // Track Cursor Position
     const cursorListener = editor.onDidChangeCursorPosition((e) => {
       const activeId = useEditorStore.getState().activeBufferId;
@@ -141,6 +156,9 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({ bufferId }) => {
     editor.setModel(model);
     editor.layout();
 
+    // Bind real-time diagnostics / compiler squiggles to Monaco model
+    const unbindDiagnostics = bindModelDiagnostics(model, buffer.filePath);
+
     // Sync content edits from Monaco to Zustand
     const contentListener = model.onDidChangeContent(() => {
       if (editor.getModel() === model) {
@@ -150,6 +168,7 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({ bufferId }) => {
     });
 
     return () => {
+      unbindDiagnostics();
       contentListener.dispose();
     };
   }, [bufferId, buffer?.filePath, buffer?.language]);

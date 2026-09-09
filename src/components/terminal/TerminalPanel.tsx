@@ -8,12 +8,19 @@ import {
   Trash2, 
   X, 
   Maximize2, 
-  Minimize2 
+  Minimize2,
+  AlertCircle,
 } from 'lucide-react';
+import { ProblemsPanel } from '../diagnostics/ProblemsPanel';
+import { useDiagnosticsStore } from '../../stores/diagnosticsStore';
+
+export type BottomDockTab = 'terminal' | 'problems';
 
 interface TerminalPanelProps {
   onClose?: () => void;
   height?: number;
+  activeTab?: BottomDockTab;
+  onTabChange?: (tab: BottomDockTab) => void;
 }
 
 interface TabSession {
@@ -21,7 +28,19 @@ interface TabSession {
   name: string;
 }
 
-export const TerminalPanel: React.FC<TerminalPanelProps> = ({ onClose, height = 220 }) => {
+export const TerminalPanel: React.FC<TerminalPanelProps> = ({ 
+  onClose, 
+  height = 220,
+  activeTab: controlledTab,
+  onTabChange
+}) => {
+  const [internalTab, setInternalTab] = useState<BottomDockTab>('terminal');
+  const activeDockTab = controlledTab ?? internalTab;
+  const setDockTab = onTabChange ?? setInternalTab;
+
+  const { getTotalCounts } = useDiagnosticsStore();
+  const diagCounts = getTotalCounts();
+
   const [sessions, setSessions] = useState<TabSession[]>([
     { id: 'term_1', name: '1: shell' }
   ]);
@@ -229,58 +248,96 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ onClose, height = 
       style={isMaximized ? undefined : { height: `${height}px` }}
       className={`flex flex-col bg-ide-panel border-t border-ide-border select-none ${isMaximized ? 'fixed inset-x-0 bottom-0 h-[80vh] z-50 shadow-2xl' : ''}`}
     >
-      {/* Terminal Tab Header */}
+      {/* Dock Tab Header */}
       <div className="h-7 bg-ide-activityBar border-b border-ide-border flex items-center justify-between px-2 text-xs">
-        {/* Left: Terminal Tabs */}
+        {/* Left: Main Dock Tabs (TERMINAL / PROBLEMS) */}
         <div className="flex items-center gap-1 overflow-x-auto h-full">
-          <span className="flex items-center gap-1.5 font-semibold text-ide-textBright text-[11px] px-2 py-1 uppercase tracking-wider text-ide-textMuted mr-1">
-            <TerminalIcon size={12} className="text-ide-accent" />
+          <button
+            onClick={() => {
+              setDockTab('terminal');
+              setTimeout(() => fitAddonRef.current?.fit(), 30);
+            }}
+            className={`flex items-center gap-1.5 font-semibold text-[11px] px-2.5 py-1 rounded-t border-t transition uppercase tracking-wider cursor-pointer ${
+              activeDockTab === 'terminal'
+                ? 'bg-ide-bg text-ide-textBright border-ide-accent'
+                : 'text-ide-textMuted hover:text-ide-textBright hover:bg-ide-hover/50 border-transparent'
+            }`}
+          >
+            <TerminalIcon size={12} className={activeDockTab === 'terminal' ? 'text-ide-accent' : ''} />
             <span>TERMINAL</span>
-          </span>
-
-          {sessions.map(s => {
-            const isActive = s.id === activeSessionId;
-            return (
-              <div
-                key={s.id}
-                onClick={() => setActiveSessionId(s.id)}
-                className={`group flex items-center gap-1.5 px-2.5 py-1 text-xs cursor-pointer rounded-t border-t transition-colors ${
-                  isActive 
-                    ? 'bg-ide-bg text-ide-textBright border-ide-accent' 
-                    : 'text-ide-textMuted hover:bg-ide-hover hover:text-ide-textNormal border-transparent'
-                }`}
-              >
-                <span>{s.name}</span>
-                {sessions.length > 1 && (
-                  <button 
-                    onClick={(e) => handleCloseSession(s.id, e)}
-                    className="opacity-0 group-hover:opacity-100 hover:text-red-400 p-0.5 rounded"
-                  >
-                    <X size={11} />
-                  </button>
-                )}
-              </div>
-            );
-          })}
+          </button>
 
           <button
-            onClick={handleAddSession}
-            title="New Terminal"
-            className="p-1 rounded text-ide-textMuted hover:text-ide-textBright hover:bg-ide-hover transition ml-1"
+            onClick={() => setDockTab('problems')}
+            className={`flex items-center gap-1.5 font-semibold text-[11px] px-2.5 py-1 rounded-t border-t transition uppercase tracking-wider cursor-pointer ${
+              activeDockTab === 'problems'
+                ? 'bg-ide-bg text-ide-textBright border-ide-accent'
+                : 'text-ide-textMuted hover:text-ide-textBright hover:bg-ide-hover/50 border-transparent'
+            }`}
           >
-            <Plus size={13} />
+            <AlertCircle size={12} className={diagCounts.errors > 0 ? 'text-rose-400' : 'text-ide-textMuted'} />
+            <span>PROBLEMS</span>
+            {diagCounts.total > 0 && (
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                  diagCounts.errors > 0 ? 'bg-rose-500/20 text-rose-300' : 'bg-amber-500/20 text-amber-300'
+                }`}
+              >
+                {diagCounts.total}
+              </span>
+            )}
           </button>
+
+          {/* Terminal Session Sub-Tabs (shown only when Terminal tab is active) */}
+          {activeDockTab === 'terminal' && (
+            <div className="flex items-center gap-1 ml-2 border-l border-ide-border/60 pl-2">
+              {sessions.map((s) => {
+                const isActive = s.id === activeSessionId;
+                return (
+                  <div
+                    key={s.id}
+                    onClick={() => setActiveSessionId(s.id)}
+                    className={`group flex items-center gap-1.5 px-2 py-0.5 text-xs cursor-pointer rounded transition-colors ${
+                      isActive 
+                        ? 'bg-ide-hover text-ide-textBright' 
+                        : 'text-ide-textMuted hover:bg-ide-hover/50 hover:text-ide-textNormal'
+                    }`}
+                  >
+                    <span>{s.name}</span>
+                    {sessions.length > 1 && (
+                      <button 
+                        onClick={(e) => handleCloseSession(s.id, e)}
+                        className="opacity-0 group-hover:opacity-100 hover:text-red-400 p-0.5 rounded"
+                      >
+                        <X size={11} />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+
+              <button
+                onClick={handleAddSession}
+                title="New Terminal Session"
+                className="p-1 rounded text-ide-textMuted hover:text-ide-textBright hover:bg-ide-hover transition"
+              >
+                <Plus size={13} />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Right: Actions */}
         <div className="flex items-center gap-1 text-ide-textMuted">
-          <button
-            onClick={handleClear}
-            title="Clear Terminal"
-            className="p-1 rounded hover:text-ide-textBright hover:bg-ide-hover transition"
-          >
-            <Trash2 size={13} />
-          </button>
+          {activeDockTab === 'terminal' && (
+            <button
+              onClick={handleClear}
+              title="Clear Terminal"
+              className="p-1 rounded hover:text-ide-textBright hover:bg-ide-hover transition"
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
           <button
             onClick={() => setIsMaximized(!isMaximized)}
             title={isMaximized ? "Restore Size" : "Maximize Panel"}
@@ -300,11 +357,20 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ onClose, height = 
         </div>
       </div>
 
-      {/* Terminal Canvas Container */}
+      {/* Terminal Canvas Container (stays mounted in DOM to keep PTY stream alive) */}
       <div 
         ref={containerRef} 
-        className="flex-1 w-full h-full bg-[#181818] p-2 overflow-hidden" 
+        className={`flex-1 w-full h-full bg-[#181818] p-2 overflow-hidden ${
+          activeDockTab === 'terminal' ? 'block' : 'hidden'
+        }`} 
       />
+
+      {/* Problems Panel Container */}
+      {activeDockTab === 'problems' && (
+        <div className="flex-1 w-full h-full overflow-hidden">
+          <ProblemsPanel onClose={onClose} />
+        </div>
+      )}
     </div>
   );
 };

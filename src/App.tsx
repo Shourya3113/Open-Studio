@@ -9,7 +9,8 @@ import {
   ChevronRight, 
   Code2, 
   Zap,
-  History
+  History,
+  AlertCircle
 } from 'lucide-react';
 import { AppSystemInfo } from './types/system';
 import { InferenceHealth } from './types/inference';
@@ -28,6 +29,7 @@ import { usePaletteStore } from './stores/paletteStore';
 import { createDefaultCommands } from './features/palette/defaultCommands';
 import { useEditorStore } from './stores/editorStore';
 import { useChatStore } from './stores/chatStore';
+import { useDiagnosticsStore } from './stores/diagnosticsStore';
 import { 
   loadWorkspaceState, 
   rehydrateWorkspace, 
@@ -85,6 +87,8 @@ export default function App() {
   const [isBottomPanelOpen, setIsBottomPanelOpen] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(220);
+  const [bottomPanelTab, setBottomPanelTab] = useState<'terminal' | 'problems'>('terminal');
+  const diagCounts = useDiagnosticsStore((s) => s.getTotalCounts());
 
   const [inferenceHealth, setInferenceHealth] = useState<InferenceHealth | null>(null);
   const selectedModel = useChatStore((s) => s.selectedModel);
@@ -147,7 +151,14 @@ export default function App() {
     const unregister = usePaletteStore.getState().registerCommands(
       createDefaultCommands({
         toggleSidebar: () => setIsSidebarOpen((prev) => !prev),
-        toggleTerminal: () => setIsBottomPanelOpen((prev) => !prev),
+        toggleTerminal: () => {
+          setBottomPanelTab('terminal');
+          setIsBottomPanelOpen((prev) => !prev);
+        },
+        openProblemsTab: () => {
+          setBottomPanelTab('problems');
+          setIsBottomPanelOpen(true);
+        },
         setActiveTab: (tab) => {
           setActiveTab(tab);
           setIsSidebarOpen(true);
@@ -176,7 +187,7 @@ export default function App() {
     return unregister;
   }, [sidebarWidth, bottomPanelHeight, isSidebarOpen, isBottomPanelOpen, activeTab]);
 
-  // Global IDE shortcuts: Ctrl+Shift+P / F1 (Commands), Ctrl+P (Quick Open), Ctrl+` (Terminal), Ctrl+B (Sidebar)
+  // Global IDE shortcuts: Ctrl+Shift+P / F1 (Commands), Ctrl+P (Quick Open), Ctrl+Shift+M (Problems), Ctrl+` (Terminal), Ctrl+B (Sidebar)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Command Palette (Commands mode): Ctrl+Shift+P, Cmd+Shift+P, F1
@@ -196,9 +207,18 @@ export default function App() {
         return;
       }
 
+      // Toggle Problems panel: Ctrl+Shift+M
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'm') {
+        e.preventDefault();
+        setBottomPanelTab('problems');
+        setIsBottomPanelOpen((prev) => !prev);
+        return;
+      }
+
       // Toggle integrated terminal: Ctrl+`
       if ((e.ctrlKey || e.metaKey) && e.key === '`') {
         e.preventDefault();
+        setBottomPanelTab('terminal');
         setIsBottomPanelOpen((prev) => !prev);
         return;
       }
@@ -490,7 +510,9 @@ export default function App() {
               />
               <TerminalPanel 
                 height={bottomPanelHeight} 
-                onClose={() => setIsBottomPanelOpen(false)} 
+                onClose={() => setIsBottomPanelOpen(false)}
+                activeTab={bottomPanelTab}
+                onTabChange={setBottomPanelTab}
               />
             </>
           )}
@@ -513,12 +535,42 @@ export default function App() {
             <span>Checkpoints</span>
           </button>
           <button 
-            onClick={() => setIsBottomPanelOpen(prev => !prev)}
-            className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded transition ${isBottomPanelOpen ? 'text-ide-accent bg-ide-hover' : 'hover:text-ide-textBright'}`}
+            onClick={() => {
+              if (isBottomPanelOpen && bottomPanelTab === 'terminal') {
+                setIsBottomPanelOpen(false);
+              } else {
+                setBottomPanelTab('terminal');
+                setIsBottomPanelOpen(true);
+              }
+            }}
+            className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded transition cursor-pointer ${isBottomPanelOpen && bottomPanelTab === 'terminal' ? 'text-ide-accent bg-ide-hover' : 'hover:text-ide-textBright'}`}
             title="Toggle Terminal (Ctrl+`)"
           >
             <Terminal size={12} />
             <span>Terminal</span>
+          </button>
+          <button 
+            onClick={() => {
+              if (isBottomPanelOpen && bottomPanelTab === 'problems') {
+                setIsBottomPanelOpen(false);
+              } else {
+                setBottomPanelTab('problems');
+                setIsBottomPanelOpen(true);
+              }
+            }}
+            className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded transition cursor-pointer ${
+              isBottomPanelOpen && bottomPanelTab === 'problems'
+                ? 'bg-ide-hover text-ide-textBright'
+                : 'hover:text-ide-textBright'
+            }`}
+            title="Toggle Problems & Diagnostics (Ctrl+Shift+M)"
+          >
+            <AlertCircle size={12} className={diagCounts.errors > 0 ? 'text-rose-400' : diagCounts.warnings > 0 ? 'text-amber-400' : 'text-emerald-400'} />
+            <span className={diagCounts.errors > 0 ? 'text-rose-300 font-medium' : diagCounts.warnings > 0 ? 'text-amber-300' : ''}>
+              {diagCounts.total > 0
+                ? `${diagCounts.errors > 0 ? `${diagCounts.errors} error${diagCounts.errors > 1 ? 's' : ''}` : ''}${diagCounts.errors > 0 && diagCounts.warnings > 0 ? ', ' : ''}${diagCounts.warnings > 0 ? `${diagCounts.warnings} warning${diagCounts.warnings > 1 ? 's' : ''}` : ''}`
+                : '0 Problems'}
+            </span>
           </button>
           {activeBuffer && activeBuffer.isDirty && (
             <span className="text-amber-400">● Unsaved Changes (Ctrl+S to save)</span>
