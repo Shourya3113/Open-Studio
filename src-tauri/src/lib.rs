@@ -52,7 +52,8 @@ pub fn run() {
             rag::embeddings::compute_cosine_similarity,
             rag::vector_store::index_workspace_vectors,
             rag::vector_store::search_codebase_vectors,
-            rag::vector_store::get_vector_store_status
+            rag::vector_store::get_vector_store_status,
+            rag::hybrid::search_hybrid_codebase
         ])
         .run(tauri::generate_context!())
         .expect("error while running Open Studio");

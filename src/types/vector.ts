@@ -35,3 +35,23 @@ export interface VectorSearchOptions {
   limit?: number;
   minScore?: number;
 }
+
+export interface HybridRankInfo {
+  vector_rank?: number | null;
+  bm25_rank?: number | null;
+}
+
+export interface HybridSearchResult {
+  chunk: CodeChunk;
+  vector_similarity: number;
+  bm25_score: number;
+  rrf_score: number;
+  source_ranks: HybridRankInfo;
+}
+
+export interface HybridSearchOptions {
+  limit?: number;
+  vectorWeight?: number;
+  bm25Weight?: number;
+}
+

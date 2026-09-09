@@ -2,6 +2,7 @@ pub mod bm25;
 pub mod aggregator;
 pub mod embeddings;
 pub mod vector_store;
+pub mod hybrid;
 
 pub use bm25::{
     build_bm25_index, create_bm25_state, get_bm25_index_status, search_bm25,
@@ -24,4 +25,10 @@ pub use vector_store::{
     create_vector_store_state, get_vector_store_status, index_workspace_vectors,
     search_codebase_vectors, VectorIndexSummary, VectorSearchResult,
     VectorStore, VectorStoreState, VectorStoreStatus,
+};
+
+pub use hybrid::{
+    calculate_rrf, execute_hybrid_search, search_hybrid_codebase,
+    HybridRankInfo, HybridSearchResult, DEFAULT_BM25_WEIGHT,
+    DEFAULT_RRF_K, DEFAULT_VECTOR_WEIGHT,
 };
