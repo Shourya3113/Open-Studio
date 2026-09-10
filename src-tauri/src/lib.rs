@@ -6,6 +6,7 @@ pub mod diff;
 pub mod git;
 pub mod ast;
 pub mod rag;
+pub mod lsp;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -15,6 +16,7 @@ pub fn run() {
         .manage(inference::InferenceManager::default())
         .manage(rag::create_bm25_state())
         .manage(rag::create_vector_store_state())
+        .manage(lsp::create_lsp_state())
         .invoke_handler(tauri::generate_handler![
             commands::system::get_system_info,
             fs::read_workspace_tree,
@@ -55,7 +57,14 @@ pub fn run() {
             rag::vector_store::get_vector_store_status,
             rag::hybrid::search_hybrid_codebase,
             rag::reranker::rerank_hybrid_candidates,
-            rag::reranker::retrieve_and_rerank_codebase
+            rag::reranker::retrieve_and_rerank_codebase,
+            lsp::client::start_lsp_server,
+            lsp::client::stop_lsp_server,
+            lsp::client::get_lsp_status,
+            lsp::client::send_lsp_did_open,
+            lsp::client::send_lsp_did_change,
+            lsp::client::request_lsp_hover,
+            lsp::client::request_lsp_definition
         ])
         .run(tauri::generate_context!())
         .expect("error while running Open Studio");
