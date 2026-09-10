@@ -53,7 +53,9 @@ pub fn run() {
             rag::vector_store::index_workspace_vectors,
             rag::vector_store::search_codebase_vectors,
             rag::vector_store::get_vector_store_status,
-            rag::hybrid::search_hybrid_codebase
+            rag::hybrid::search_hybrid_codebase,
+            rag::reranker::rerank_hybrid_candidates,
+            rag::reranker::retrieve_and_rerank_codebase
         ])
         .run(tauri::generate_context!())
         .expect("error while running Open Studio");

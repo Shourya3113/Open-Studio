@@ -55,3 +55,35 @@ export interface HybridSearchOptions {
   bm25Weight?: number;
 }
 
+export interface RerankedSnippet {
+  chunk_id: string;
+  file_path: string;
+  start_line: number;
+  end_line: number;
+  raw_content: string;
+  cleaned_content: string;
+  relevance_score: number;
+  token_count_original: number;
+  token_count_cleaned: number;
+  matched_terms: string[];
+  structural_type?: string | null;
+}
+
+export interface RerankSummary {
+  candidates_evaluated: number;
+  candidates_retained: number;
+  noise_tokens_saved: number;
+  duration_ms: number;
+}
+
+export interface RerankResult {
+  snippets: RerankedSnippet[];
+  summary: RerankSummary;
+}
+
+export interface RerankOptions {
+  limit?: number;
+  minRelevance?: number;
+}
+
+

@@ -3,6 +3,7 @@ pub mod aggregator;
 pub mod embeddings;
 pub mod vector_store;
 pub mod hybrid;
+pub mod reranker;
 
 pub use bm25::{
     build_bm25_index, create_bm25_state, get_bm25_index_status, search_bm25,
@@ -31,4 +32,10 @@ pub use hybrid::{
     calculate_rrf, execute_hybrid_search, search_hybrid_codebase,
     HybridRankInfo, HybridSearchResult, DEFAULT_BM25_WEIGHT,
     DEFAULT_RRF_K, DEFAULT_VECTOR_WEIGHT,
+};
+
+pub use reranker::{
+    clean_chunk_noise, compute_cross_encoder_score, rerank_candidates,
+    rerank_hybrid_candidates, retrieve_and_rerank_codebase, RerankResult,
+    RerankSummary, RerankedSnippet, DEFAULT_MIN_RELEVANCE, DEFAULT_RERANK_LIMIT,
 };
