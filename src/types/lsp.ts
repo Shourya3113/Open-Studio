@@ -30,3 +30,20 @@ export interface LspDiagnostic {
   message: string;
   source?: string;
 }
+
+export interface LanguageServerSpec {
+  language: string;
+  extensions: string[];
+  binary_names: string[];
+  default_args: string[];
+  install_hint: string;
+}
+
+export interface DetectedServer {
+  language: string;
+  binary_name: string;
+  binary_path?: string | null;
+  is_installed: boolean;
+  install_hint: string;
+}
+

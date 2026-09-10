@@ -43,6 +43,8 @@ import {
   extractCurrentWorkspaceState,
   saveWorkspaceState 
 } from './stores/persistence';
+import { DetectedServer } from './types/lsp';
+import { detectServerForFile } from './features/lsp/serverDetector';
 
 const SAMPLE_WELCOME_TS = `// Open Studio: Local AI IDE & Agentic Workspace
 // Day 2: Monaco Editor Core & Offline Bundling Verified
@@ -124,6 +126,30 @@ export default function App() {
 
   const { openFile, buffers, activeBufferId } = useEditorStore();
   const activeBuffer = activeBufferId ? buffers[activeBufferId] : null;
+  const [activeLspServer, setActiveLspServer] = useState<DetectedServer | null>(null);
+
+  // Auto-detect LSP Server for active file
+  useEffect(() => {
+    if (!activeBuffer?.filePath) {
+      setActiveLspServer(null);
+      return;
+    }
+    let isCancelled = false;
+    detectServerForFile(activeBuffer.filePath)
+      .then((server) => {
+        if (!isCancelled) {
+          setActiveLspServer(server);
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setActiveLspServer(null);
+        }
+      });
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeBuffer?.filePath]);
 
   const refreshInferenceTelemetry = useCallback(async () => {
     try {
@@ -672,6 +698,34 @@ export default function App() {
               <span className="text-ide-textBright font-mono">{autocompleteMetrics.avgLatencyMs}ms</span>
               <span className="text-ide-textMuted font-mono">({autocompleteMetrics.acceptanceRate}%)</span>
             </span>
+          )}
+          {/* Active File LSP Status */}
+          {activeLspServer && (
+            <button
+              type="button"
+              onClick={() => {
+                if (!activeLspServer.is_installed && activeLspServer.install_hint) {
+                  navigator.clipboard.writeText(activeLspServer.install_hint);
+                }
+              }}
+              className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[10px] font-mono transition cursor-pointer ${
+                activeLspServer.is_installed
+                  ? 'text-emerald-400 bg-emerald-950/40 hover:bg-emerald-900/50'
+                  : 'text-amber-400 bg-amber-950/40 hover:bg-amber-900/50'
+              }`}
+              title={
+                activeLspServer.is_installed
+                  ? `LSP Ready: ${activeLspServer.binary_name} (${activeLspServer.binary_path || 'detected'})`
+                  : `LSP Missing: ${activeLspServer.binary_name}. Click to copy install command: ${activeLspServer.install_hint}`
+              }
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${activeLspServer.is_installed ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+              <span>
+                {activeLspServer.is_installed
+                  ? `${activeLspServer.language}: LSP Ready`
+                  : `${activeLspServer.language}: No LSP`}
+              </span>
+            </button>
           )}
           {activeBuffer?.cursorPosition && (
             <span>

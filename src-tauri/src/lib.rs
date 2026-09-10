@@ -64,7 +64,10 @@ pub fn run() {
             lsp::client::send_lsp_did_open,
             lsp::client::send_lsp_did_change,
             lsp::client::request_lsp_hover,
-            lsp::client::request_lsp_definition
+            lsp::client::request_lsp_definition,
+            lsp::detector::detect_language_servers,
+            lsp::detector::detect_server_for_file_cmd,
+            lsp::detector::auto_start_lsp_for_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running Open Studio");
