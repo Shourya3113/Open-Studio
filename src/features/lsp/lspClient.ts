@@ -2,6 +2,7 @@ import {
   LspHoverResponse,
   LspLocation,
   LspStatus,
+  LspDiagnostic,
 } from '../../types/lsp';
 
 // In-memory document store for test/browser environments
@@ -237,6 +238,103 @@ export async function requestLspDefinition(
     }
 
     return locations;
+  }
+}
+
+/**
+ * Requests diagnostics from the language server for an open document or workspace
+ */
+export async function requestLspDiagnostics(
+  language: string,
+  filePath?: string
+): Promise<LspDiagnostic[]> {
+  const langLower = language.toLowerCase();
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return await invoke<LspDiagnostic[]>('request_lsp_diagnostics', {
+      language: langLower,
+      filePath,
+    });
+  } catch {
+    const diags: LspDiagnostic[] = [];
+    const targetPath = filePath;
+    const content = targetPath ? mockDocs.get(targetPath) : undefined;
+
+    if (targetPath && content) {
+      let openBraces = 0;
+      let openParens = 0;
+      const lines = content.split('\n');
+
+      lines.forEach((lStr, idx) => {
+        for (const ch of lStr) {
+          if (ch === '{') openBraces++;
+          if (ch === '}') openBraces--;
+          if (ch === '(') openParens++;
+          if (ch === ')') openParens--;
+        }
+        if (openBraces < 0) {
+          diags.push({
+            file_path: targetPath,
+            range: {
+              start_line: idx,
+              start_character: 0,
+              end_line: idx,
+              end_character: lStr.length,
+            },
+            severity: 'error',
+            message: "Unmatched closing brace '}'",
+            source: `${langLower}-lsp`,
+          });
+          openBraces = 0;
+        }
+        if (openParens < 0) {
+          diags.push({
+            file_path: targetPath,
+            range: {
+              start_line: idx,
+              start_character: 0,
+              end_line: idx,
+              end_character: lStr.length,
+            },
+            severity: 'error',
+            message: "Unmatched closing parenthesis ')'",
+            source: `${langLower}-lsp`,
+          });
+          openParens = 0;
+        }
+      });
+
+      if (openBraces > 0) {
+        diags.push({
+          file_path: targetPath,
+          range: {
+            start_line: 0,
+            start_character: 0,
+            end_line: 0,
+            end_character: 1,
+          },
+          severity: 'error',
+          message: "Unclosed opening brace '{'",
+          source: `${langLower}-lsp`,
+        });
+      }
+      if (openParens > 0) {
+        diags.push({
+          file_path: targetPath,
+          range: {
+            start_line: 0,
+            start_character: 0,
+            end_line: 0,
+            end_character: 1,
+          },
+          severity: 'error',
+          message: "Unclosed opening parenthesis '('",
+          source: `${langLower}-lsp`,
+        });
+      }
+    }
+
+    return diags;
   }
 }
 

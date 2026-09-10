@@ -4,6 +4,8 @@ import './monacoWorkers';
 import { registerOpenStudioTheme, THEME_NAME } from './monacoTheme';
 import { registerInlineCompletionProvider } from '../../features/autocomplete/inlineProvider';
 import { bindModelDiagnostics } from '../../features/diagnostics/monacoBridge';
+import { registerLspLanguageFeatures, queryAndSyncLspDiagnostics } from '../../features/diagnostics/lspMonacoBridge';
+import { sendLspDidOpen, sendLspDidChange } from '../../features/lsp/lspClient';
 import { useEditorStore } from '../../stores/editorStore';
 import { usePaletteStore } from '../../stores/paletteStore';
 
@@ -61,6 +63,9 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({ bufferId }) => {
     // Register Qwen 2.5 Coder resident inline autocomplete provider
     const inlineDisposables = registerInlineCompletionProvider();
 
+    // Register Native LSP Hover and Definition providers
+    const lspDisposables = registerLspLanguageFeatures();
+
     // Register IDE Keyboard Shortcuts directly in Monaco
     // Ctrl+S: Save File
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
@@ -113,6 +118,7 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({ bufferId }) => {
 
     return () => {
       inlineDisposables.forEach((d) => d.dispose());
+      lspDisposables.forEach((d) => d.dispose());
       cursorListener.dispose();
       resizeObserver.disconnect();
       editor.dispose();
@@ -159,15 +165,27 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({ bufferId }) => {
     // Bind real-time diagnostics / compiler squiggles to Monaco model
     const unbindDiagnostics = bindModelDiagnostics(model, buffer.filePath);
 
-    // Sync content edits from Monaco to Zustand
+    // Notify LSP of open document & query initial diagnostics
+    sendLspDidOpen(buffer.language, buffer.filePath, buffer.content).catch(() => {});
+    queryAndSyncLspDiagnostics(buffer.language, buffer.filePath, model).catch(() => {});
+
+    // Sync content edits from Monaco to Zustand and LSP
+    let diagDebounceTimer: ReturnType<typeof setTimeout> | null = null;
     const contentListener = model.onDidChangeContent(() => {
       if (editor.getModel() === model) {
         const val = model.getValue();
         updateContent(buffer.id, val);
+        sendLspDidChange(buffer.language, buffer.filePath, val).catch(() => {});
+
+        if (diagDebounceTimer) clearTimeout(diagDebounceTimer);
+        diagDebounceTimer = setTimeout(() => {
+          queryAndSyncLspDiagnostics(buffer.language, buffer.filePath, model).catch(() => {});
+        }, 500);
       }
     });
 
     return () => {
+      if (diagDebounceTimer) clearTimeout(diagDebounceTimer);
       unbindDiagnostics();
       contentListener.dispose();
     };

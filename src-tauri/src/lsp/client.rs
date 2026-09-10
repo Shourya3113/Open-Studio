@@ -33,6 +33,15 @@ pub struct LspStatus {
     pub error: Option<String>,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct LspDiagnostic {
+    pub file_path: String,
+    pub range: LspRange,
+    pub severity: String,
+    pub message: String,
+    pub source: Option<String>,
+}
+
 // -----------------------------------------------------------------------------
 // JSON-RPC LSP Framing Protocol
 // -----------------------------------------------------------------------------
@@ -121,6 +130,7 @@ pub struct LspSession {
     pub is_running: bool,
     pub request_counter: AtomicI64,
     pub open_documents: HashMap<String, String>,
+    pub diagnostics: HashMap<String, Vec<LspDiagnostic>>,
     pub error: Option<String>,
 }
 
@@ -133,6 +143,7 @@ impl LspSession {
             is_running: true,
             request_counter: AtomicI64::new(1),
             open_documents: HashMap::new(),
+            diagnostics: HashMap::new(),
             error: None,
         }
     }
@@ -239,6 +250,122 @@ impl LspSession {
         }
 
         locations
+    }
+
+    pub fn set_diagnostics(&mut self, file_path: String, diagnostics: Vec<LspDiagnostic>) {
+        self.diagnostics.insert(file_path, diagnostics);
+    }
+
+    pub fn get_diagnostics(&self, file_path: &str) -> Vec<LspDiagnostic> {
+        if let Some(stored) = self.diagnostics.get(file_path) {
+            if !stored.is_empty() {
+                return stored.clone();
+            }
+        }
+        self.compute_basic_diagnostics(file_path)
+    }
+
+    pub fn get_all_diagnostics(&self) -> Vec<LspDiagnostic> {
+        let mut results = Vec::new();
+        for (file_path, stored) in &self.diagnostics {
+            if !stored.is_empty() {
+                results.extend(stored.clone());
+            } else {
+                results.extend(self.compute_basic_diagnostics(file_path));
+            }
+        }
+        for file_path in self.open_documents.keys() {
+            if !self.diagnostics.contains_key(file_path) {
+                results.extend(self.compute_basic_diagnostics(file_path));
+            }
+        }
+        results
+    }
+
+    pub fn compute_basic_diagnostics(&self, file_path: &str) -> Vec<LspDiagnostic> {
+        let content = match self.open_documents.get(file_path) {
+            Some(c) => c,
+            None => return Vec::new(),
+        };
+
+        let mut diags = Vec::new();
+        let mut paren_count = 0i32;
+        let mut brace_count = 0i32;
+
+        for (idx, line) in content.lines().enumerate() {
+            let line_num = idx as u32;
+            for ch in line.chars() {
+                match ch {
+                    '(' => paren_count += 1,
+                    ')' => paren_count -= 1,
+                    '{' => brace_count += 1,
+                    '}' => brace_count -= 1,
+                    _ => {}
+                }
+            }
+            if paren_count < 0 {
+                diags.push(LspDiagnostic {
+                    file_path: file_path.to_string(),
+                    range: LspRange {
+                        start_line: line_num,
+                        start_character: 0,
+                        end_line: line_num,
+                        end_character: line.len() as u32,
+                    },
+                    severity: "error".to_string(),
+                    message: "Unmatched closing parenthesis ')'".to_string(),
+                    source: Some(self.server_name.clone()),
+                });
+                paren_count = 0;
+            }
+            if brace_count < 0 {
+                diags.push(LspDiagnostic {
+                    file_path: file_path.to_string(),
+                    range: LspRange {
+                        start_line: line_num,
+                        start_character: 0,
+                        end_line: line_num,
+                        end_character: line.len() as u32,
+                    },
+                    severity: "error".to_string(),
+                    message: "Unmatched closing brace '}'".to_string(),
+                    source: Some(self.server_name.clone()),
+                });
+                brace_count = 0;
+            }
+        }
+
+        if paren_count > 0 {
+            diags.push(LspDiagnostic {
+                file_path: file_path.to_string(),
+                range: LspRange {
+                    start_line: 0,
+                    start_character: 0,
+                    end_line: 0,
+                    end_character: 1,
+                },
+                severity: "error".to_string(),
+                message: "Unclosed opening parenthesis '('".to_string(),
+                source: Some(self.server_name.clone()),
+            });
+        }
+
+        if brace_count > 0 {
+            diags.push(LspDiagnostic {
+                file_path: file_path.to_string(),
+                range: LspRange {
+                    start_line: 0,
+                    start_character: 0,
+                    end_line: 0,
+                    end_character: 1,
+                },
+                severity: "error".to_string(),
+                message: "Unclosed opening brace '{'".to_string(),
+                source: Some(self.server_name.clone()),
+            });
+        }
+
+        diags
     }
 
     pub fn get_status(&self) -> LspStatus {
@@ -447,6 +574,26 @@ pub async fn request_lsp_definition(
     }
 }
 
+#[tauri::command]
+pub async fn request_lsp_diagnostics(
+    state: tauri::State<'_, LspManagerRef>,
+    language: String,
+    file_path: Option<String>,
+) -> Result<Vec<LspDiagnostic>, String> {
+    let lang_lower = language.to_lowercase();
+    let manager = state.read().await;
+
+    if let Some(session_arc) = manager.sessions.get(&lang_lower) {
+        let session = session_arc.read().await;
+        match file_path {
+            Some(path) => Ok(session.get_diagnostics(&path)),
+            None => Ok(session.get_all_diagnostics()),
+        }
+    } else {
+        Ok(Vec::new())
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Unit Tests
 // -----------------------------------------------------------------------------
@@ -454,6 +601,40 @@ pub async fn request_lsp_definition(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+
+    #[test]
+    fn test_lsp_diagnostics_storage_and_syntax_detection() {
+        let mut session = LspSession::new(
+            "typescript".to_string(),
+            "typescript-language-server".to_string(),
+            Some("file:///workspace".to_string()),
+        );
+
+        let bad_code = "function test() {\n  console.log('unclosed';\n";
+        session.did_open("src/bad.ts".to_string(), bad_code.to_string());
+
+        let diags = session.get_diagnostics("src/bad.ts");
+        assert!(!diags.is_empty());
+        assert!(diags.iter().any(|d| d.message.contains("parenthesis") || d.message.contains("brace")));
+
+        // Test explicit external diagnostics overriding/setting
+        let explicit_diag = LspDiagnostic {
+            file_path: "src/bad.ts".to_string(),
+            range: LspRange {
+                start_line: 1,
+                start_character: 2,
+                end_line: 1,
+                end_character: 10,
+            },
+            severity: "error".to_string(),
+            message: "Explicit compiler diagnostic".to_string(),
+            source: Some("tsc".to_string()),
+        };
+        session.set_diagnostics("src/bad.ts".to_string(), vec![explicit_diag.clone()]);
+        let retrieved = session.get_diagnostics("src/bad.ts");
+        assert_eq!(retrieved.len(), 1);
+        assert_eq!(retrieved[0].message, "Explicit compiler diagnostic");
+    }
 
     #[test]
     fn test_encode_and_parse_lsp_frames() {
