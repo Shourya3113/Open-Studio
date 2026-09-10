@@ -1,4 +1,4 @@
-import { InjectedContextSummary } from '../../types/context';
+import { InjectedContextItem, InjectedContextSummary } from '../../types/context';
 
 export interface ChatMessage {
   id: string;
@@ -93,20 +93,63 @@ export async function augmentPromptWithContext(
 
   contextSummary = resultToSummary(aggResult);
 
-  // If @codebase or @search was requested, inject BM25 formatted snippets
+  // If @codebase or @search was requested, inject 3-Stage Hybrid RAG snippets (@codebase v2)
   if (hasCodebaseTag || hasSearchTag) {
-    const { formatBM25ContextBlock } = await import('../rag/bm25Search');
-    const bm25CompatBlock = formatBM25ContextBlock(
-      aggResult.snippets.map((s) => ({
-        file_path: s.file_path,
-        score: s.score,
-        matching_lines: [s.line_number],
-        snippet: s.snippet,
-        matched_terms: s.matched_terms,
-      }))
-    );
-    if (bm25CompatBlock) {
-      augmented = `${augmented}\n\n${bm25CompatBlock}`;
+    const { retrieveAndRerankCodebase } = await import('../rag/reranker');
+    const rerankResult = await retrieveAndRerankCodebase(cleanQuery, {
+      limit: 5,
+      minRelevance: 0.25,
+    });
+
+    if (rerankResult.snippets.length > 0) {
+      const formattedLines = [
+        '=== CODEBASE CONTEXT (@codebase v2 - Hybrid RAG & Re-Ranked) ===',
+        'The following code snippets were retrieved from the local codebase using semantic vector search and BM25 lexical re-ranking:',
+      ];
+      for (const s of rerankResult.snippets) {
+        formattedLines.push(
+          `--- ${s.file_path}:${s.start_line}-${s.end_line} (${(s.relevance_score * 100).toFixed(0)}% relevance) ---`
+        );
+        formattedLines.push(s.cleaned_content);
+        formattedLines.push('');
+      }
+      formattedLines.push('=== END CODEBASE CONTEXT ===');
+      augmented = `${augmented}\n\n${formattedLines.join('\n')}`;
+
+      const uniqueFiles = Array.from(new Set(rerankResult.snippets.map((s) => s.file_path)));
+      const items: InjectedContextItem[] = rerankResult.snippets.map((s) => ({
+        type: 'snippet' as const,
+        filePath: s.file_path,
+        lineNumber: s.start_line,
+        score: s.relevance_score,
+        snippet: s.cleaned_content,
+        tokenCount: s.token_count_cleaned,
+        isActive: activeFile ? s.file_path.toLowerCase().includes(activeFile.toLowerCase()) : false,
+        isOpen: openFiles ? openFiles.some((f) => s.file_path.toLowerCase().includes(f.toLowerCase())) : false,
+      }));
+
+      contextSummary = {
+        query: cleanQuery,
+        totalTokens: items.reduce((sum, item) => sum + item.tokenCount, 0),
+        budgetTokens: 3000,
+        items,
+        referencedFiles: uniqueFiles,
+        rawContextText: formattedLines.join('\n'),
+      };
+    } else {
+      const { formatBM25ContextBlock } = await import('../rag/bm25Search');
+      const bm25CompatBlock = formatBM25ContextBlock(
+        aggResult.snippets.map((s) => ({
+          file_path: s.file_path,
+          score: s.score,
+          matching_lines: [s.line_number],
+          snippet: s.snippet,
+          matched_terms: s.matched_terms,
+        }))
+      );
+      if (bm25CompatBlock) {
+        augmented = `${augmented}\n\n${bm25CompatBlock}`;
+      }
     }
   }
 
