@@ -10,9 +10,15 @@ import {
   Maximize2, 
   Minimize2,
   AlertCircle,
+  Sparkles,
 } from 'lucide-react';
 import { ProblemsPanel } from '../diagnostics/ProblemsPanel';
 import { useDiagnosticsStore } from '../../stores/diagnosticsStore';
+import { useTerminalErrorStore } from '../../stores/terminalErrorStore';
+import { TerminalStreamAccumulator } from '../../features/terminal/errorCapture';
+import { CapturedTerminalError } from '../../types/terminal';
+import { useEditorStore } from '../../stores/editorStore';
+import { useChatStore } from '../../stores/chatStore';
 
 export type BottomDockTab = 'terminal' | 'problems';
 
@@ -46,6 +52,46 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   ]);
   const [activeSessionId, setActiveSessionId] = useState<string>('term_1');
   const [isMaximized, setIsMaximized] = useState(false);
+
+  const sessionErrors = useTerminalErrorStore((s) => s.errorsBySession[activeSessionId] || []);
+  const activeError = useTerminalErrorStore((s) => s.activeError);
+  const isBannerDismissed = useTerminalErrorStore((s) => s.isBannerDismissed);
+  const dismissBanner = useTerminalErrorStore((s) => s.dismissBanner);
+  const accumulatorsRef = useRef<Map<string, TerminalStreamAccumulator>>(new Map());
+
+  const getAccumulator = (sessionId: string) => {
+    let acc = accumulatorsRef.current.get(sessionId);
+    if (!acc) {
+      acc = new TerminalStreamAccumulator(sessionId);
+      accumulatorsRef.current.set(sessionId, acc);
+    }
+    return acc;
+  };
+
+  useEffect(() => {
+    useTerminalErrorStore.getState().setActiveSessionId(activeSessionId);
+  }, [activeSessionId]);
+
+  const handleJumpToError = (err: CapturedTerminalError) => {
+    if (!err.filePath) return;
+    const editorStore = useEditorStore.getState();
+    const bufId = editorStore.openFile(err.filePath);
+    if (err.line) {
+      editorStore.updateCursor(bufId, err.line, err.column || 1);
+    }
+  };
+
+  const handleFixWithAI = async (err: CapturedTerminalError) => {
+    const chatStore = useChatStore.getState();
+    const prompt = 
+      `Fix this ${err.tool.toUpperCase()} compilation error:\n` +
+      `File: ${err.filePath}${err.line ? `:${err.line}` : ''}\n` +
+      `Error: ${err.errorCode ? `[${err.errorCode}] ` : ''}${err.message}\n\n` +
+      (err.contextSnippet ? `Compiler Trace:\n\`\`\`\n${err.contextSnippet}\n\`\`\`\n\n` : '') +
+      `Please diagnose the root cause and provide a frugal search/replace diff to resolve this error.`;
+
+    await chatStore.sendMessage(prompt);
+  };
 
   const containerRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
@@ -126,6 +172,31 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         const unlisten = await listen<string>(`terminal-data-${activeSessionId}`, (event) => {
           if (!isDisposed) {
             term.write(event.payload);
+            const acc = getAccumulator(activeSessionId);
+            const newErrors = acc.feed(event.payload);
+            if (newErrors.length > 0) {
+              useTerminalErrorStore.getState().addErrors(newErrors);
+              // Also sync with diagnosticsStore so Problems tab reflects terminal errors
+              const diagItems = newErrors
+                .filter((e) => e.filePath && e.line)
+                .map((e) => ({
+                  id: e.id,
+                  filePath: e.filePath!,
+                  severity: 'error' as const,
+                  message: `[${e.tool.toUpperCase()}] ${e.message}`,
+                  source: e.tool,
+                  code: e.errorCode,
+                  range: {
+                    startLine: e.line!,
+                    startColumn: e.column || 1,
+                    endLine: e.line!,
+                    endColumn: (e.column || 1) + 1,
+                  },
+                }));
+              if (diagItems.length > 0) {
+                useDiagnosticsStore.getState().addDiagnostics(diagItems);
+              }
+            }
           }
         });
         unlistenRef.current = unlisten;
@@ -155,17 +226,38 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             const cmd = currentLine.trim();
             if (cmd === 'clear') {
               term.clear();
+              const acc = accumulatorsRef.current.get(activeSessionId);
+              if (acc) acc.clear();
+              useTerminalErrorStore.getState().clearSessionErrors(activeSessionId);
             } else if (cmd === 'help') {
               term.writeln('Open Studio Terminal Commands:');
-              term.writeln('  help     - Show available simulated commands');
-              term.writeln('  clear    - Clear terminal buffer');
-              term.writeln('  status   - Show AI engine readiness');
-              term.writeln('  ls       - List workspace files');
+              term.writeln('  help        - Show available simulated commands');
+              term.writeln('  clear       - Clear terminal buffer');
+              term.writeln('  status      - Show AI engine readiness');
+              term.writeln('  ls          - List workspace files');
+              term.writeln('  cargo test  - Simulate Rust compilation error');
+              term.writeln('  npm test    - Simulate TypeScript compilation error');
             } else if (cmd === 'status') {
               term.writeln('\x1b[32m✔ Local AI Runtime: Online (Air-gapped)\x1b[0m');
               term.writeln('  Resident Model: qwen2.5-coder:1.5b');
             } else if (cmd === 'ls') {
               term.writeln('README.md  OPEN_STUDIO_EXECUTION_MASTERPLAN.md  src/  src-tauri/');
+            } else if (cmd === 'cargo test' || cmd === 'cargo build') {
+              const simCargo = '\x1b[31merror[E0308]: mismatched types\x1b[0m\n  --> src/main.rs:12:5\n   |\n12 |     let x: u32 = "hello";\n   |            ---   ^^^^^^^ expected `u32`, found `&str`\n';
+              term.write(simCargo);
+              const acc = getAccumulator(activeSessionId);
+              const newErrors = acc.feed(simCargo);
+              if (newErrors.length > 0) {
+                useTerminalErrorStore.getState().addErrors(newErrors);
+              }
+            } else if (cmd === 'npm test' || cmd === 'npx tsc') {
+              const simTsc = 'src/App.tsx(42,15): error TS2322: Type \'string\' is not assignable to type \'number\'.\n';
+              term.write(simTsc);
+              const acc = getAccumulator(activeSessionId);
+              const newErrors = acc.feed(simTsc);
+              if (newErrors.length > 0) {
+                useTerminalErrorStore.getState().addErrors(newErrors);
+              }
             } else if (cmd.length > 0) {
               term.writeln(`command executed: ${cmd}`);
             }
@@ -241,6 +333,11 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     if (xtermRef.current) {
       xtermRef.current.clear();
     }
+    const acc = accumulatorsRef.current.get(activeSessionId);
+    if (acc) {
+      acc.clear();
+    }
+    useTerminalErrorStore.getState().clearSessionErrors(activeSessionId);
   };
 
   return (
@@ -265,6 +362,11 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           >
             <TerminalIcon size={12} className={activeDockTab === 'terminal' ? 'text-ide-accent' : ''} />
             <span>TERMINAL</span>
+            {sessionErrors.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                {sessionErrors.length}
+              </span>
+            )}
           </button>
 
           <button
@@ -356,6 +458,71 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           )}
         </div>
       </div>
+
+      {/* Captured Compiler Error Bar */}
+      {activeDockTab === 'terminal' && sessionErrors.length > 0 && !isBannerDismissed && (
+        <div className="bg-[#2d1215] border-b border-rose-500/40 px-3 py-1.5 flex items-center justify-between gap-3 text-xs shadow-inner flex-shrink-0 animate-in slide-in-from-top-1 duration-150">
+          {(() => {
+            const currentDisplayError = activeError || sessionErrors[sessionErrors.length - 1];
+            return (
+              <>
+                <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 uppercase border border-rose-500/30 flex-shrink-0">
+                    {currentDisplayError.tool}
+                  </span>
+                  {currentDisplayError.errorCode && (
+                    <span className="text-[11px] font-mono text-rose-300 font-semibold flex-shrink-0">
+                      [{currentDisplayError.errorCode}]
+                    </span>
+                  )}
+                  <span className="text-rose-100 font-medium truncate" title={currentDisplayError.message}>
+                    {currentDisplayError.message}
+                  </span>
+                  {currentDisplayError.filePath && (
+                    <span className="text-rose-300/80 text-[11px] font-mono truncate flex-shrink-0">
+                      in {currentDisplayError.filePath}{currentDisplayError.line ? `:${currentDisplayError.line}` : ''}
+                    </span>
+                  )}
+                  {sessionErrors.length > 1 && (
+                    <span className="text-[10px] text-rose-400 bg-rose-950/60 px-1.5 py-0.5 rounded-full border border-rose-800 flex-shrink-0">
+                      +{sessionErrors.length - 1} more
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {currentDisplayError.filePath && (
+                    <button
+                      onClick={() => handleJumpToError(currentDisplayError)}
+                      className="px-2 py-0.5 rounded bg-rose-900/60 hover:bg-rose-800/80 text-rose-200 border border-rose-500/40 text-[11px] font-medium transition cursor-pointer"
+                      title="Jump to error location in code editor"
+                    >
+                      Jump to File
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => handleFixWithAI(currentDisplayError)}
+                    className="px-2 py-0.5 rounded bg-ide-accent hover:bg-ide-accent/90 text-white text-[11px] font-semibold transition flex items-center gap-1 shadow-sm cursor-pointer"
+                    title="Send compiler diagnostic to AI Chat for automatic repair"
+                  >
+                    <Sparkles size={11} />
+                    <span>Fix with AI</span>
+                  </button>
+
+                  <button
+                    onClick={dismissBanner}
+                    className="p-1 rounded text-rose-400 hover:text-rose-200 hover:bg-rose-900/40 transition cursor-pointer"
+                    title="Dismiss error alert"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              </>
+            );
+          })()}
+        </div>
+      )}
 
       {/* Terminal Canvas Container (stays mounted in DOM to keep PTY stream alive) */}
       <div 
