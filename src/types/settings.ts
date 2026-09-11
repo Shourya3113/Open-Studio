@@ -5,6 +5,9 @@ export interface OpenStudioSettings {
   ollamaEndpoint: string;
   autocompleteModel: string;
   chatModel: string;
+  editModel: string;
+  reasoningModel: string;
+  autoModelRouter: boolean;
   tabSize: number;
   fontSize: number;
   theme: EditorTheme;
@@ -18,6 +21,9 @@ export const DEFAULT_SETTINGS: OpenStudioSettings = {
   ollamaEndpoint: 'http://localhost:11434',
   autocompleteModel: 'qwen2.5-coder:1.5b',
   chatModel: 'qwen2.5-coder:7b',
+  editModel: 'qwen2.5-coder:7b',
+  reasoningModel: 'qwen2.5-coder:7b',
+  autoModelRouter: true,
   tabSize: 2,
   fontSize: 14,
   theme: 'open-studio-dark',

@@ -10,6 +10,8 @@ export interface ChatMessage {
   isStreaming?: boolean;
   error?: string;
   contextSummary?: InjectedContextSummary;
+  model?: string;
+  routeRationale?: string;
 }
 
 export const CHATML_STOP_TOKENS = [

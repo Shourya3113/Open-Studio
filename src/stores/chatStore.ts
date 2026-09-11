@@ -12,7 +12,9 @@ import {
   injectFileContext 
 } from '../features/chat/fileMention';
 import { useEditorStore } from './editorStore';
+import { useSettingsStore } from './settingsStore';
 import { streamCompletion } from '../services/inference';
+import { routeTask } from '../features/router/taskRouter';
 
 export interface ChatState {
   messages: ChatMessage[];
@@ -71,7 +73,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
       genStats: null,
     });
 
-    const model = modelOverride || get().selectedModel;
+    let model = modelOverride || get().selectedModel;
+    let temperature = 0.2;
+    let keepAlive: string | undefined = undefined;
+    let priority: 'autocomplete' | 'chat' | 'background' | 'abort' = 'chat';
+    let routeRationale: string | undefined = undefined;
+
+    // Dynamic Multi-Model Task Router & VRAM Arbiter integration
+    const autoRouterEnabled = useSettingsStore.getState().settings.autoModelRouter;
+    if ((autoRouterEnabled || model === 'auto') && !modelOverride) {
+      try {
+        const decision = await routeTask(undefined, trimmed);
+        model = decision.model_name;
+        temperature = decision.temperature;
+        keepAlive = decision.keep_alive;
+        priority = decision.priority;
+        routeRationale = `${decision.task_type}: ${decision.rationale}`;
+      } catch (routerErr) {
+        console.warn('Task router routing fallback:', routerErr);
+      }
+    }
 
     // Resolve @file mentions for grounding context
     const mentions = extractFileMentions(trimmed);
@@ -116,14 +137,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
         {
           model,
           prompt,
-          temperature: 0.2,
+          temperature,
           stop_tokens: CHATML_STOP_TOKENS,
-          priority: 'chat',
+          priority,
+          keep_alive: keepAlive,
         },
         (tokenDelta) => {
           set((state) => ({
             messages: state.messages.map((m) =>
-              m.id === asstId ? { ...m, content: m.content + tokenDelta } : m
+              m.id === asstId ? { ...m, content: m.content + tokenDelta, model, routeRationale } : m
             ),
           }));
         },
@@ -145,6 +167,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     isStreaming: false,
                     tokensCount: stats.eval_count,
                     tokPerSec,
+                    model,
+                    routeRationale,
                   }
                 : m
             ),

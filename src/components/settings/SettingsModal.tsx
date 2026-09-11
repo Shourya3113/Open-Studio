@@ -8,6 +8,9 @@ export const SettingsModal: React.FC = () => {
   const [ollamaEndpoint, setOllamaEndpoint] = useState(settings.ollamaEndpoint);
   const [autocompleteModel, setAutocompleteModel] = useState(settings.autocompleteModel);
   const [chatModel, setChatModel] = useState(settings.chatModel);
+  const [editModel, setEditModel] = useState(settings.editModel || 'qwen2.5-coder:7b');
+  const [reasoningModel, setReasoningModel] = useState(settings.reasoningModel || 'qwen2.5-coder:7b');
+  const [autoModelRouter, setAutoModelRouter] = useState(settings.autoModelRouter ?? true);
   const [tabSize, setTabSize] = useState(settings.tabSize);
   const [fontSize, setFontSize] = useState(settings.fontSize);
   const [theme, setTheme] = useState<EditorTheme>(settings.theme);
@@ -21,6 +24,9 @@ export const SettingsModal: React.FC = () => {
       setOllamaEndpoint(settings.ollamaEndpoint);
       setAutocompleteModel(settings.autocompleteModel);
       setChatModel(settings.chatModel);
+      setEditModel(settings.editModel || 'qwen2.5-coder:7b');
+      setReasoningModel(settings.reasoningModel || 'qwen2.5-coder:7b');
+      setAutoModelRouter(settings.autoModelRouter ?? true);
       setTabSize(settings.tabSize);
       setFontSize(settings.fontSize);
       setTheme(settings.theme);
@@ -49,6 +55,9 @@ export const SettingsModal: React.FC = () => {
       ollamaEndpoint: ollamaEndpoint.trim() || 'http://localhost:11434',
       autocompleteModel: autocompleteModel.trim() || 'qwen2.5-coder:1.5b',
       chatModel: chatModel.trim() || 'qwen2.5-coder:7b',
+      editModel: editModel.trim() || 'qwen2.5-coder:7b',
+      reasoningModel: reasoningModel.trim() || 'qwen2.5-coder:7b',
+      autoModelRouter,
       tabSize,
       fontSize,
       theme,
@@ -155,6 +164,59 @@ export const SettingsModal: React.FC = () => {
                   <p className="text-[11px] text-[#858585] mt-1">
                     Standard model for agent reasoning & diffs.
                   </p>
+                </div>
+              </div>
+
+              {/* Dynamic Task Router & Arbiter Options */}
+              <div className="pt-3 border-t border-[#2d2d30] space-y-3">
+                <div className="flex items-start gap-2.5">
+                  <input
+                    type="checkbox"
+                    id="autoModelRouter"
+                    checked={autoModelRouter}
+                    onChange={(e) => setAutoModelRouter(e.target.checked)}
+                    className="mt-0.5 rounded border-[#3e3e42] bg-[#1e1e1e] text-[#007acc] focus:ring-0 cursor-pointer"
+                  />
+                  <label htmlFor="autoModelRouter" className="text-xs text-white cursor-pointer select-none">
+                    <span className="font-semibold text-[#4ec9b0]">Dynamic Task Router & VRAM Arbiter</span>
+                    <span className="block text-[11px] text-[#858585] font-normal mt-0.5 leading-relaxed">
+                      Automatically routes tasks: 1.5B (pinned) for sub-40ms autocomplete, 7B for fast diff edits, and 7B/14B for codebase-wide reasoning with smart VRAM swapper eviction.
+                    </span>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 pt-1">
+                  <div>
+                    <label className="block text-xs font-medium text-white mb-1">
+                      Fast Diff & Search-Replace Model
+                    </label>
+                    <input
+                      type="text"
+                      value={editModel}
+                      onChange={(e) => setEditModel(e.target.value)}
+                      placeholder="qwen2.5-coder:7b"
+                      className="w-full bg-[#1e1e1e] border border-[#3e3e42] rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#007acc]"
+                    />
+                    <p className="text-[11px] text-[#858585] mt-1">
+                      Target model for surgical search/replace diff blocks.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-white mb-1">
+                      Deep Reasoning Model
+                    </label>
+                    <input
+                      type="text"
+                      value={reasoningModel}
+                      onChange={(e) => setReasoningModel(e.target.value)}
+                      placeholder="qwen2.5-coder:7b"
+                      className="w-full bg-[#1e1e1e] border border-[#3e3e42] rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#007acc]"
+                    />
+                    <p className="text-[11px] text-[#858585] mt-1">
+                      Target model for @codebase architecture & step planning.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

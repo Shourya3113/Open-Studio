@@ -210,6 +210,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ inferenceHealth }) => {
               className="bg-ide-bg border border-ide-border/80 rounded px-2 py-0.5 text-[11px] text-ide-textBright focus:outline-none focus:border-ide-accent max-w-[160px] truncate"
               title="Select inference model"
             >
+              <option value="auto">✨ Auto (Task Router)</option>
               {inferenceHealth?.models && inferenceHealth.models.length > 0 ? (
                 inferenceHealth.models.map((m) => (
                   <option key={m.name} value={m.name}>
@@ -301,6 +302,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ inferenceHealth }) => {
                     <>
                       <Bot size={11} className="text-ide-accent" />
                       <span>Assistant</span>
+                      {msg.model && (
+                        <span
+                          className="text-[10px] text-ide-textMuted font-mono bg-ide-bg px-1.5 py-0.5 rounded border border-ide-border/50"
+                          title={msg.routeRationale || `Inference Model: ${msg.model}`}
+                        >
+                          {msg.model}
+                        </span>
+                      )}
                       {msg.tokPerSec && (
                         <span className="text-emerald-400 font-mono">
                           • {msg.tokPerSec}

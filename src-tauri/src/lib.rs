@@ -8,6 +8,7 @@ pub mod ast;
 pub mod rag;
 pub mod lsp;
 pub mod hardware;
+pub mod router;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -19,6 +20,7 @@ pub fn run() {
         .manage(rag::create_vector_store_state())
         .manage(lsp::create_lsp_state())
         .manage(hardware::create_sentinel_state())
+        .manage(router::create_router_state())
         .invoke_handler(tauri::generate_handler![
             commands::system::get_system_info,
             fs::read_workspace_tree,
@@ -79,7 +81,11 @@ pub fn run() {
             hardware::set_hardware_tier_override,
             hardware::evict_model_from_sentinel,
             hardware::evict_idle_models_from_sentinel,
-            hardware::get_clamped_context_budget
+            hardware::get_clamped_context_budget,
+            router::route_task_cmd,
+            router::classify_prompt_task_cmd,
+            router::get_model_router_config_cmd,
+            router::set_model_router_config_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running Open Studio");
