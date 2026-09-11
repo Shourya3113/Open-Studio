@@ -47,9 +47,21 @@ export function buildDiagnosticRepairPrompt(
 ): string {
   const { snippet, startLine } = extractContextWindow(fileContent, request.line);
 
+  let iterationSection = '';
+  if (request.iteration && request.iteration > 1) {
+    iterationSection =
+      `ITERATIVE REPAIR ATTEMPT ${request.iteration} of ${request.maxIterations || 3}:\n` +
+      `The previous repair attempt did not completely fix the problem. The compiler reported:\n` +
+      (request.previousErrors && request.previousErrors.length > 0
+        ? request.previousErrors.map((e) => `- ${e}`).join('\n') + '\n'
+        : '- Errors still persist.\n') +
+      `Carefully evaluate why the previous change was insufficient and provide a corrected, revised search/replace block.\n\n`;
+  }
+
   return (
     `You are Open Studio's automated code repair engine running 100% offline and air-gapped.\n` +
     `Diagnose and repair the following compiler/test diagnostic with minimum changes.\n\n` +
+    iterationSection +
     `File: ${request.filePath}${request.line ? `:${request.line}` : ''}${request.column ? `:${request.column}` : ''}\n` +
     `Tool: ${request.tool || 'compiler'}\n` +
     `Error Code: ${request.errorCode || 'UNKNOWN'}\n` +
@@ -171,14 +183,18 @@ export async function executeDiagnosticRepair(
 export async function applyRepairDiffs(
   diffs: FileDiff[],
   summary = 'AI Auto-Fix compiler diagnostic'
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; checkpointId?: string }> {
   if (!diffs || diffs.length === 0) {
     return { success: false, error: 'No diff hunks to apply' };
   }
 
   // 1. Create safety shadow checkpoint before touching files
+  let checkpointId: string | undefined;
   try {
-    await createCheckpoint(summary);
+    const cp = await createCheckpoint(summary);
+    if (cp) {
+      checkpointId = cp.id || cp.commitHash;
+    }
   } catch {
     // Continue even if git is not initialized
   }
@@ -227,5 +243,5 @@ export async function applyRepairDiffs(
     }
   }
 
-  return { success: true };
+  return { success: true, checkpointId };
 }

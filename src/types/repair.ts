@@ -4,6 +4,24 @@ import { FileDiff } from './diff';
 
 export type RepairSourceType = 'terminal' | 'problem';
 
+export type VerificationStatus =
+  | 'idle'
+  | 'executing'
+  | 'analyzing'
+  | 'passed'
+  | 'failed'
+  | 'timeout'
+  | 'rolled_back';
+
+export interface VerificationResult {
+  status: VerificationStatus;
+  command: string;
+  output: string;
+  exitCode?: number;
+  remainingErrors: CapturedTerminalError[];
+  message: string;
+}
+
 export interface DiagnosticRepairRequest {
   id: string;
   sourceType: RepairSourceType;
@@ -16,6 +34,10 @@ export interface DiagnosticRepairRequest {
   errorCode?: string;
   contextSnippet?: string;
   tool?: string;
+  reRunCommand?: string;
+  iteration?: number;
+  maxIterations?: number;
+  previousErrors?: string[];
 }
 
 export interface DiagnosticRepairResult {
@@ -24,4 +46,5 @@ export interface DiagnosticRepairResult {
   diffs: FileDiff[];
   explanation: string;
   modelUsed: string;
+  checkpointId?: string;
 }

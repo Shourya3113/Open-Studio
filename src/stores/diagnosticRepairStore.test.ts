@@ -99,6 +99,59 @@ describe('DiagnosticRepairStore (Zustand)', () => {
     // Verify buffer was updated
     const activeBuf = Object.values(useEditorStore.getState().buffers)[0];
     expect(activeBuf.content).toContain('let x: u32 = 42;');
+    expect(useDiagnosticRepairStore.getState().isRollbackAvailable).toBe(true);
+  });
+
+  it('updates re-run command with setReRunCommand', () => {
+    useDiagnosticRepairStore.getState().setReRunCommand('cargo check');
+    expect(useDiagnosticRepairStore.getState().reRunCommand).toBe('cargo check');
+  });
+
+  it('handles iterative repair with retryIterativeRepair', async () => {
+    useDiagnosticRepairStore.setState({
+      activeRequest: {
+        id: 'rep_iter',
+        sourceType: 'terminal',
+        filePath: 'src/main.rs',
+        errorMessage: 'mismatched types',
+        tool: 'cargo',
+      },
+      iterationCount: 1,
+      maxIterations: 3,
+      remainingErrors: [
+        {
+          id: 'err_remaining_1',
+          sessionId: 's1',
+          tool: 'cargo',
+          message: 'expected u32, found i32',
+          rawOutput: 'error[E0308]: expected u32, found i32',
+          timestamp: Date.now(),
+        },
+      ],
+    });
+
+    await useDiagnosticRepairStore.getState().retryIterativeRepair();
+    expect(useDiagnosticRepairStore.getState().iterationCount).toBe(2);
+    expect(useDiagnosticRepairStore.getState().activeRequest?.iteration).toBe(2);
+    expect(useDiagnosticRepairStore.getState().activeRequest?.previousErrors).toContain('[cargo] expected u32, found i32');
+  });
+
+  it('prevents retryIterativeRepair beyond maxIterations', async () => {
+    useDiagnosticRepairStore.setState({
+      activeRequest: {
+        id: 'rep_iter_max',
+        sourceType: 'terminal',
+        filePath: 'src/main.rs',
+        errorMessage: 'mismatched types',
+        tool: 'cargo',
+      },
+      iterationCount: 3,
+      maxIterations: 3,
+    });
+
+    await useDiagnosticRepairStore.getState().retryIterativeRepair();
+    expect(useDiagnosticRepairStore.getState().iterationCount).toBe(3);
+    expect(useDiagnosticRepairStore.getState().error).toContain('Reached maximum limit');
   });
 
   it('closes modal on closeModal action', () => {

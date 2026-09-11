@@ -81,7 +81,13 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     }
   };
 
+  const lastCommandsRef = useRef<Map<string, string>>(new Map());
+
   const handleFixWithAI = async (err: CapturedTerminalError) => {
+    const lastCmd = lastCommandsRef.current.get(activeSessionId);
+    if (lastCmd && !err.command) {
+      err.command = lastCmd;
+    }
     await useDiagnosticRepairStore.getState().startRepairFromTerminal(err);
   };
 
@@ -194,7 +200,20 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         unlistenRef.current = unlisten;
 
         // Forward stdin from user keystrokes to Rust PTY
+        let nativeInputBuffer = '';
         term.onData(async (data) => {
+          if (data === '\r' || data === '\n') {
+            const trimmed = nativeInputBuffer.trim();
+            if (trimmed) {
+              lastCommandsRef.current.set(activeSessionId, trimmed);
+            }
+            nativeInputBuffer = '';
+          } else if (data === '\u007f' || data === '\b') {
+            nativeInputBuffer = nativeInputBuffer.slice(0, -1);
+          } else if (data.length === 1 && data >= ' ') {
+            nativeInputBuffer += data;
+          }
+
           try {
             await invoke('write_terminal_input', {
               id: activeSessionId,
@@ -216,6 +235,9 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           if (data === '\r') { // Enter
             term.writeln('');
             const cmd = currentLine.trim();
+            if (cmd) {
+              lastCommandsRef.current.set(activeSessionId, cmd);
+            }
             if (cmd === 'clear') {
               term.clear();
               const acc = accumulatorsRef.current.get(activeSessionId);
@@ -496,10 +518,10 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
                   <button
                     onClick={() => handleFixWithAI(currentDisplayError)}
                     className="px-2 py-0.5 rounded bg-ide-accent hover:bg-ide-accent/90 text-white text-[11px] font-semibold transition flex items-center gap-1 shadow-sm cursor-pointer"
-                    title="Send compiler diagnostic to AI Chat for automatic repair"
+                    title="Diagnose, auto-repair, and re-run to verify fix in terminal"
                   >
                     <Sparkles size={11} />
-                    <span>Fix with AI</span>
+                    <span>Fix & Verify</span>
                   </button>
 
                   <button

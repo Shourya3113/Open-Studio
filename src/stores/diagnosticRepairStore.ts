@@ -1,9 +1,14 @@
 import { create } from 'zustand';
-import { DiagnosticRepairRequest } from '../types/repair';
+import { DiagnosticRepairRequest, VerificationStatus } from '../types/repair';
 import { FileDiff } from '../types/diff';
 import { CapturedTerminalError } from '../types/terminal';
 import { DiagnosticItem } from '../types/diagnostics';
 import { executeDiagnosticRepair, applyRepairDiffs } from '../features/terminal/diagnosticRepair';
+import {
+  inferReRunCommand,
+  verifyFixRun,
+  rollbackRepairToCheckpoint,
+} from '../features/terminal/fixVerifier';
 import { useTerminalErrorStore } from './terminalErrorStore';
 
 interface DiagnosticRepairState {
@@ -18,11 +23,25 @@ interface DiagnosticRepairState {
   error: string | null;
   applied: boolean;
 
+  // Day 39 Automated Tooling Loop & Verification State
+  verificationStatus: VerificationStatus;
+  reRunCommand: string;
+  verificationOutput: string;
+  remainingErrors: CapturedTerminalError[];
+  iterationCount: number;
+  maxIterations: number;
+  lastCheckpointId: string | null;
+  isRollbackAvailable: boolean;
+
   // Actions
   startRepair: (request: DiagnosticRepairRequest) => Promise<void>;
   startRepairFromTerminal: (err: CapturedTerminalError) => Promise<void>;
   startRepairFromDiagnostic: (item: DiagnosticItem) => Promise<void>;
+  setReRunCommand: (command: string) => void;
   applyFix: () => Promise<boolean>;
+  applyAndVerify: (sessionId?: string) => Promise<boolean>;
+  rollbackFix: () => Promise<boolean>;
+  retryIterativeRepair: () => Promise<void>;
   closeModal: () => void;
   retryRepair: () => Promise<void>;
 }
@@ -39,7 +58,22 @@ export const useDiagnosticRepairStore = create<DiagnosticRepairState>((set, get)
   error: null,
   applied: false,
 
+  verificationStatus: 'idle',
+  reRunCommand: 'cargo test',
+  verificationOutput: '',
+  remainingErrors: [],
+  iterationCount: 1,
+  maxIterations: 3,
+  lastCheckpointId: null,
+  isRollbackAvailable: false,
+
+  setReRunCommand: (command: string) => {
+    set({ reRunCommand: command });
+  },
+
   startRepair: async (request: DiagnosticRepairRequest) => {
+    const inferred = inferReRunCommand(request.tool, request.filePath, request.reRunCommand);
+
     set({
       isOpen: true,
       isGenerating: true,
@@ -51,6 +85,11 @@ export const useDiagnosticRepairStore = create<DiagnosticRepairState>((set, get)
       modelUsed: null,
       error: null,
       applied: false,
+      verificationStatus: 'idle',
+      reRunCommand: inferred,
+      verificationOutput: '',
+      remainingErrors: [],
+      iterationCount: request.iteration || 1,
     });
 
     try {
@@ -76,6 +115,7 @@ export const useDiagnosticRepairStore = create<DiagnosticRepairState>((set, get)
   },
 
   startRepairFromTerminal: async (err: CapturedTerminalError) => {
+    const inferred = inferReRunCommand(err.tool, err.filePath, err.command);
     const request: DiagnosticRepairRequest = {
       id: `rep_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       sourceType: 'terminal',
@@ -87,12 +127,16 @@ export const useDiagnosticRepairStore = create<DiagnosticRepairState>((set, get)
       errorCode: err.errorCode,
       contextSnippet: err.contextSnippet || err.rawOutput,
       tool: err.tool,
+      reRunCommand: inferred,
+      iteration: 1,
+      maxIterations: 3,
     };
 
     await get().startRepair(request);
   },
 
   startRepairFromDiagnostic: async (item: DiagnosticItem) => {
+    const inferred = inferReRunCommand(item.source, item.filePath);
     const request: DiagnosticRepairRequest = {
       id: `rep_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       sourceType: 'problem',
@@ -103,6 +147,9 @@ export const useDiagnosticRepairStore = create<DiagnosticRepairState>((set, get)
       errorMessage: item.message,
       errorCode: item.code ? String(item.code) : undefined,
       tool: item.source || 'compiler',
+      reRunCommand: inferred,
+      iteration: 1,
+      maxIterations: 3,
     };
 
     await get().startRepair(request);
@@ -121,7 +168,13 @@ export const useDiagnosticRepairStore = create<DiagnosticRepairState>((set, get)
     const res = await applyRepairDiffs(parsedDiffs, summary);
 
     if (res.success) {
-      set({ isApplying: false, applied: true });
+      set({
+        isApplying: false,
+        applied: true,
+        lastCheckpointId: res.checkpointId || null,
+        isRollbackAvailable: !!res.checkpointId,
+      });
+
       if (activeRequest?.terminalError) {
         useTerminalErrorStore.getState().markAsFixed(activeRequest.terminalError.id);
       }
@@ -133,6 +186,104 @@ export const useDiagnosticRepairStore = create<DiagnosticRepairState>((set, get)
       });
       return false;
     }
+  },
+
+  applyAndVerify: async (sessionId = 'default') => {
+    const fixApplied = await get().applyFix();
+    if (!fixApplied) return false;
+
+    const { activeRequest, reRunCommand } = get();
+    set({
+      verificationStatus: 'executing',
+      verificationOutput: '',
+      remainingErrors: [],
+    });
+
+    try {
+      const result = await verifyFixRun({
+        sessionId: activeRequest?.terminalError?.sessionId || sessionId,
+        command: reRunCommand,
+        tool: activeRequest?.tool,
+        targetErrorCode: activeRequest?.errorCode,
+        timeoutMs: 12000,
+        onChunk: (chunk) => {
+          set((state) => ({
+            verificationOutput: state.verificationOutput + chunk,
+          }));
+        },
+      });
+
+      set({
+        verificationStatus: result.status,
+        verificationOutput: result.output || get().verificationOutput,
+        remainingErrors: result.remainingErrors,
+      });
+
+      if (result.status === 'passed') {
+        if (activeRequest?.terminalError) {
+          useTerminalErrorStore.getState().markAsFixed(activeRequest.terminalError.id);
+        }
+        return true;
+      }
+
+      return false;
+    } catch (err: any) {
+      set({
+        verificationStatus: 'failed',
+        error: err?.message || 'Verification execution failed',
+      });
+      return false;
+    }
+  },
+
+  rollbackFix: async () => {
+    const { lastCheckpointId, activeRequest } = get();
+    if (!lastCheckpointId || !activeRequest?.filePath) {
+      set({ error: 'No checkpoint available to rollback' });
+      return false;
+    }
+
+    set({ isApplying: true });
+    const res = await rollbackRepairToCheckpoint(lastCheckpointId, activeRequest.filePath);
+
+    if (res.success) {
+      set({
+        isApplying: false,
+        applied: false,
+        verificationStatus: 'rolled_back',
+        isRollbackAvailable: false,
+      });
+      return true;
+    } else {
+      set({
+        isApplying: false,
+        error: res.message || 'Rollback failed',
+      });
+      return false;
+    }
+  },
+
+  retryIterativeRepair: async () => {
+    const { activeRequest, iterationCount, maxIterations, remainingErrors } = get();
+    if (!activeRequest) return;
+
+    if (iterationCount >= maxIterations) {
+      set({
+        error: `Reached maximum limit of ${maxIterations} iterative repair attempts.`,
+      });
+      return;
+    }
+
+    const nextIteration = iterationCount + 1;
+    const errorSummaries = remainingErrors.map((e) => `[${e.tool}] ${e.message}`);
+
+    const updatedRequest: DiagnosticRepairRequest = {
+      ...activeRequest,
+      iteration: nextIteration,
+      previousErrors: errorSummaries.length > 0 ? errorSummaries : [activeRequest.errorMessage],
+    };
+
+    await get().startRepair(updatedRequest);
   },
 
   closeModal: () => {

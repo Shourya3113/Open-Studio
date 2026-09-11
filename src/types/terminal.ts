@@ -17,6 +17,7 @@ export interface CapturedTerminalError {
   line?: number;
   column?: number;
   contextSnippet?: string;
+  command?: string;
   rawOutput: string;
   timestamp: number;
   fixed?: boolean;
