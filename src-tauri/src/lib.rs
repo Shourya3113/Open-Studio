@@ -66,6 +66,10 @@ pub fn run() {
             lsp::client::request_lsp_hover,
             lsp::client::request_lsp_definition,
             lsp::client::request_lsp_diagnostics,
+            lsp::client::request_lsp_document_symbols,
+            lsp::client::request_lsp_workspace_symbols,
+            lsp::client::request_lsp_document_highlights,
+            lsp::client::request_lsp_references,
             lsp::detector::detect_language_servers,
             lsp::detector::detect_server_for_file_cmd,
             lsp::detector::auto_start_lsp_for_file

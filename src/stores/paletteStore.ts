@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { PaletteCommand } from '../types/palette';
 
-export type PaletteMode = 'commands' | 'files';
+export type PaletteMode = 'commands' | 'files' | 'symbols';
 
 export interface PaletteState {
   isOpen: boolean;

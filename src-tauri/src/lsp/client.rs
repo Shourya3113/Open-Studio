@@ -42,6 +42,21 @@ pub struct LspDiagnostic {
     pub source: Option<String>,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct LspSymbol {
+    pub name: String,
+    pub kind: String,
+    pub range: LspRange,
+    pub container_name: Option<String>,
+    pub file_path: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct LspHighlight {
+    pub range: LspRange,
+    pub kind: String,
+}
+
 // -----------------------------------------------------------------------------
 // JSON-RPC LSP Framing Protocol
 // -----------------------------------------------------------------------------
@@ -252,6 +267,274 @@ impl LspSession {
         locations
     }
 
+    pub fn document_symbols(&self, file_path: &str) -> Vec<LspSymbol> {
+        let content = match self.open_documents.get(file_path) {
+            Some(c) => c,
+            None => return Vec::new(),
+        };
+
+        let mut symbols = Vec::new();
+        for (idx, line) in content.lines().enumerate() {
+            let line_num = idx as u32;
+            let trimmed = line.trim();
+
+            if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with('#') || trimmed.starts_with("/*") {
+                continue;
+            }
+
+            if trimmed.starts_with("export function ")
+                || trimmed.starts_with("function ")
+                || trimmed.starts_with("pub fn ")
+                || trimmed.starts_with("fn ")
+                || trimmed.starts_with("def ")
+                || trimmed.starts_with("func ")
+            {
+                let name = extract_decl_name(trimmed);
+                if !name.is_empty() {
+                    symbols.push(LspSymbol {
+                        name,
+                        kind: "Function".to_string(),
+                        range: LspRange {
+                            start_line: line_num,
+                            start_character: 0,
+                            end_line: line_num,
+                            end_character: line.len() as u32,
+                        },
+                        container_name: None,
+                        file_path: file_path.to_string(),
+                    });
+                }
+            } else if trimmed.starts_with("export class ")
+                || trimmed.starts_with("class ")
+                || trimmed.starts_with("pub struct ")
+                || trimmed.starts_with("struct ")
+            {
+                let name = extract_decl_name(trimmed);
+                if !name.is_empty() {
+                    symbols.push(LspSymbol {
+                        name,
+                        kind: "Class".to_string(),
+                        range: LspRange {
+                            start_line: line_num,
+                            start_character: 0,
+                            end_line: line_num,
+                            end_character: line.len() as u32,
+                        },
+                        container_name: None,
+                        file_path: file_path.to_string(),
+                    });
+                }
+            } else if trimmed.starts_with("export interface ")
+                || trimmed.starts_with("interface ")
+                || trimmed.starts_with("pub trait ")
+                || trimmed.starts_with("trait ")
+            {
+                let name = extract_decl_name(trimmed);
+                if !name.is_empty() {
+                    symbols.push(LspSymbol {
+                        name,
+                        kind: "Interface".to_string(),
+                        range: LspRange {
+                            start_line: line_num,
+                            start_character: 0,
+                            end_line: line_num,
+                            end_character: line.len() as u32,
+                        },
+                        container_name: None,
+                        file_path: file_path.to_string(),
+                    });
+                }
+            } else if trimmed.starts_with("export enum ")
+                || trimmed.starts_with("enum ")
+                || trimmed.starts_with("pub enum ")
+            {
+                let name = extract_decl_name(trimmed);
+                if !name.is_empty() {
+                    symbols.push(LspSymbol {
+                        name,
+                        kind: "Enum".to_string(),
+                        range: LspRange {
+                            start_line: line_num,
+                            start_character: 0,
+                            end_line: line_num,
+                            end_character: line.len() as u32,
+                        },
+                        container_name: None,
+                        file_path: file_path.to_string(),
+                    });
+                }
+            } else if trimmed.starts_with("export const ")
+                || trimmed.starts_with("const ")
+                || trimmed.starts_with("let ")
+                || trimmed.starts_with("var ")
+                || trimmed.starts_with("pub const ")
+            {
+                let name = extract_decl_name(trimmed);
+                if !name.is_empty() {
+                    symbols.push(LspSymbol {
+                        name,
+                        kind: "Variable".to_string(),
+                        range: LspRange {
+                            start_line: line_num,
+                            start_character: 0,
+                            end_line: line_num,
+                            end_character: line.len() as u32,
+                        },
+                        container_name: None,
+                        file_path: file_path.to_string(),
+                    });
+                }
+            }
+        }
+
+        symbols
+    }
+
+    pub fn workspace_symbols(&self, query: &str) -> Vec<LspSymbol> {
+        let q_lower = query.to_lowercase();
+        let mut results = Vec::new();
+
+        for file_path in self.open_documents.keys() {
+            let syms = self.document_symbols(file_path);
+            for s in syms {
+                if q_lower.is_empty() || s.name.to_lowercase().contains(&q_lower) {
+                    results.push(s);
+                }
+            }
+        }
+
+        results
+    }
+
+    pub fn document_highlights(&self, file_path: &str, line: u32, character: u32) -> Vec<LspHighlight> {
+        let content = match self.open_documents.get(file_path) {
+            Some(c) => c,
+            None => return Vec::new(),
+        };
+
+        let lines: Vec<&str> = content.lines().collect();
+        if (line as usize) >= lines.len() {
+            return Vec::new();
+        }
+
+        let target_line = lines[line as usize];
+        let word = extract_word_at_pos(target_line, character as usize);
+        if word.is_empty() {
+            return Vec::new();
+        }
+
+        let mut highlights = Vec::new();
+        for (idx, l_str) in lines.iter().enumerate() {
+            let line_num = idx as u32;
+            let mut char_idx = 0;
+            while let Some(pos) = l_str[char_idx..].find(&word) {
+                let start_char = char_idx + pos;
+                let end_char = start_char + word.len();
+                char_idx = end_char;
+
+                let is_left_boundary = start_char == 0
+                    || !l_str[..start_char]
+                        .chars()
+                        .last()
+                        .map(|c| c.is_alphanumeric() || c == '_')
+                        .unwrap_or(false);
+                let is_right_boundary = end_char >= l_str.len()
+                    || !l_str[end_char..]
+                        .chars()
+                        .next()
+                        .map(|c| c.is_alphanumeric() || c == '_')
+                        .unwrap_or(false);
+
+                if is_left_boundary && is_right_boundary {
+                    let trimmed = l_str.trim_start();
+                    let is_write = trimmed.starts_with("let ")
+                        || trimmed.starts_with("const ")
+                        || trimmed.starts_with("var ")
+                        || trimmed.starts_with("fn ")
+                        || trimmed.starts_with("def ")
+                        || trimmed.starts_with("function ")
+                        || l_str[end_char..].trim_start().starts_with('=');
+
+                    highlights.push(LspHighlight {
+                        range: LspRange {
+                            start_line: line_num,
+                            start_character: start_char as u32,
+                            end_line: line_num,
+                            end_character: end_char as u32,
+                        },
+                        kind: if is_write { "write".to_string() } else { "read".to_string() },
+                    });
+                }
+            }
+        }
+
+        highlights
+    }
+
+    pub fn find_references(&self, file_path: &str, line: u32, character: u32, include_declaration: bool) -> Vec<LspLocation> {
+        let content = match self.open_documents.get(file_path) {
+            Some(c) => c,
+            None => return Vec::new(),
+        };
+
+        let lines: Vec<&str> = content.lines().collect();
+        if (line as usize) >= lines.len() {
+            return Vec::new();
+        }
+
+        let target_line = lines[line as usize];
+        let word = extract_word_at_pos(target_line, character as usize);
+        if word.is_empty() {
+            return Vec::new();
+        }
+
+        let mut references = Vec::new();
+        for (doc_path, doc_content) in &self.open_documents {
+            for (idx, l_str) in doc_content.lines().enumerate() {
+                let line_num = idx as u32;
+
+                let is_same_pos = doc_path == file_path && line_num == line;
+                if is_same_pos && !include_declaration {
+                    continue;
+                }
+
+                let mut char_idx = 0;
+                while let Some(pos) = l_str[char_idx..].find(&word) {
+                    let start_char = char_idx + pos;
+                    let end_char = start_char + word.len();
+                    char_idx = end_char;
+
+                    let is_left_boundary = start_char == 0
+                        || !l_str[..start_char]
+                            .chars()
+                            .last()
+                            .map(|c| c.is_alphanumeric() || c == '_')
+                            .unwrap_or(false);
+                    let is_right_boundary = end_char >= l_str.len()
+                        || !l_str[end_char..]
+                            .chars()
+                            .next()
+                            .map(|c| c.is_alphanumeric() || c == '_')
+                            .unwrap_or(false);
+
+                    if is_left_boundary && is_right_boundary {
+                        references.push(LspLocation {
+                            file_path: doc_path.clone(),
+                            range: LspRange {
+                                start_line: line_num,
+                                start_character: start_char as u32,
+                                end_line: line_num,
+                                end_character: end_char as u32,
+                            },
+                        });
+                    }
+                }
+            }
+        }
+
+        references
+    }
+
     pub fn set_diagnostics(&mut self, file_path: String, diagnostics: Vec<LspDiagnostic>) {
         self.diagnostics.insert(file_path, diagnostics);
     }
@@ -396,6 +679,29 @@ fn extract_word_at_pos(line: &str, char_idx: usize) -> String {
     }
 
     chars[start..end].iter().collect()
+}
+
+fn extract_decl_name(trimmed_line: &str) -> String {
+    let mut line = trimmed_line;
+    let prefixes = ["export ", "pub ", "async ", "default "];
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for p in &prefixes {
+            if let Some(rest) = line.strip_prefix(p) {
+                line = rest.trim_start();
+                changed = true;
+            }
+        }
+    }
+
+    let parts: Vec<&str> = line.split_whitespace().collect();
+    if parts.len() >= 2 {
+        let token = parts[1];
+        let name: String = token.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+        return name;
+    }
+    String::new()
 }
 
 // -----------------------------------------------------------------------------
@@ -594,6 +900,79 @@ pub async fn request_lsp_diagnostics(
     }
 }
 
+#[tauri::command]
+pub async fn request_lsp_document_symbols(
+    state: tauri::State<'_, LspManagerRef>,
+    language: String,
+    file_path: String,
+) -> Result<Vec<LspSymbol>, String> {
+    let lang_lower = language.to_lowercase();
+    let manager = state.read().await;
+
+    if let Some(session_arc) = manager.sessions.get(&lang_lower) {
+        let session = session_arc.read().await;
+        Ok(session.document_symbols(&file_path))
+    } else {
+        Ok(Vec::new())
+    }
+}
+
+#[tauri::command]
+pub async fn request_lsp_workspace_symbols(
+    state: tauri::State<'_, LspManagerRef>,
+    language: String,
+    query: String,
+) -> Result<Vec<LspSymbol>, String> {
+    let lang_lower = language.to_lowercase();
+    let manager = state.read().await;
+
+    if let Some(session_arc) = manager.sessions.get(&lang_lower) {
+        let session = session_arc.read().await;
+        Ok(session.workspace_symbols(&query))
+    } else {
+        Ok(Vec::new())
+    }
+}
+
+#[tauri::command]
+pub async fn request_lsp_document_highlights(
+    state: tauri::State<'_, LspManagerRef>,
+    language: String,
+    file_path: String,
+    line: u32,
+    character: u32,
+) -> Result<Vec<LspHighlight>, String> {
+    let lang_lower = language.to_lowercase();
+    let manager = state.read().await;
+
+    if let Some(session_arc) = manager.sessions.get(&lang_lower) {
+        let session = session_arc.read().await;
+        Ok(session.document_highlights(&file_path, line, character))
+    } else {
+        Ok(Vec::new())
+    }
+}
+
+#[tauri::command]
+pub async fn request_lsp_references(
+    state: tauri::State<'_, LspManagerRef>,
+    language: String,
+    file_path: String,
+    line: u32,
+    character: u32,
+    include_declaration: bool,
+) -> Result<Vec<LspLocation>, String> {
+    let lang_lower = language.to_lowercase();
+    let manager = state.read().await;
+
+    if let Some(session_arc) = manager.sessions.get(&lang_lower) {
+        let session = session_arc.read().await;
+        Ok(session.find_references(&file_path, line, character, include_declaration))
+    } else {
+        Ok(Vec::new())
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Unit Tests
 // -----------------------------------------------------------------------------
@@ -601,6 +980,40 @@ pub async fn request_lsp_diagnostics(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+
+    #[test]
+    fn test_lsp_symbols_highlights_and_references() {
+        let mut session = LspSession::new(
+            "typescript".to_string(),
+            "typescript-language-server".to_string(),
+            Some("file:///workspace".to_string()),
+        );
+
+        let code_a = "export function processUser(id: string) {\n  const active = true;\n  return active;\n}";
+        let code_b = "import { processUser } from './a';\nfunction run() {\n  processUser('123');\n}";
+        session.did_open("src/a.ts".to_string(), code_a.to_string());
+        session.did_open("src/b.ts".to_string(), code_b.to_string());
+
+        // 1. Document symbols
+        let symbols = session.document_symbols("src/a.ts");
+        assert!(symbols.iter().any(|s| s.name == "processUser" && s.kind == "Function"));
+        assert!(symbols.iter().any(|s| s.name == "active" && s.kind == "Variable"));
+
+        // 2. Workspace symbols query
+        let ws_syms = session.workspace_symbols("process");
+        assert_eq!(ws_syms.len(), 1);
+        assert_eq!(ws_syms[0].name, "processUser");
+
+        // 3. Document highlights for 'active' (line 1, character 8 in code_a)
+        let highlights = session.document_highlights("src/a.ts", 1, 8);
+        assert_eq!(highlights.len(), 2);
+        assert!(highlights.iter().any(|h| h.kind == "write"));
+        assert!(highlights.iter().any(|h| h.kind == "read"));
+
+        // 4. Find references for processUser across documents
+        let refs = session.find_references("src/a.ts", 0, 20, true);
+        assert_eq!(refs.len(), 3); // 1 in a.ts, 2 in b.ts (import + call)
+    }
 
     #[test]
     fn test_lsp_diagnostics_storage_and_syntax_detection() {

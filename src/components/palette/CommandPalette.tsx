@@ -10,11 +10,14 @@ import {
   FolderOpen,
   Keyboard,
   CornerDownLeft,
+  Code2,
 } from 'lucide-react';
 import { usePaletteStore, PaletteMode } from '../../stores/paletteStore';
 import { useEditorStore } from '../../stores/editorStore';
 import { fuzzyFilter, fuzzyHighlight } from '../../features/palette/fuzzySearch';
 import { CommandCategory, PaletteCommand } from '../../types/palette';
+import { requestLspDocumentSymbols } from '../../features/lsp/lspClient';
+import { LspSymbol } from '../../types/lsp';
 
 export const CommandPalette: React.FC = () => {
   const {
@@ -103,6 +106,33 @@ export const CommandPalette: React.FC = () => {
     }
   }, [isOpen, mode]);
 
+  const activeBufferId = useEditorStore((s) => s.activeBufferId);
+  const activeBuffer = activeBufferId ? buffers[activeBufferId] : null;
+  const [availableSymbols, setAvailableSymbols] = useState<LspSymbol[]>([]);
+
+  const isSymbolMode = mode === 'symbols' || query.startsWith('@');
+  const symbolQuery = query.startsWith('@') ? query.slice(1) : query;
+
+  // Load document symbols when in symbol mode
+  useEffect(() => {
+    if (!isOpen || !isSymbolMode) return;
+    if (!activeBuffer) {
+      setAvailableSymbols([]);
+      return;
+    }
+    let cancelled = false;
+    requestLspDocumentSymbols(activeBuffer.language, activeBuffer.filePath)
+      .then((res) => {
+        if (!cancelled) setAvailableSymbols(res);
+      })
+      .catch(() => {
+        if (!cancelled) setAvailableSymbols([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, isSymbolMode, activeBuffer]);
+
   // Filter commands
   const filteredCommands = useMemo(() => {
     if (mode !== 'commands') return [];
@@ -125,7 +155,22 @@ export const CommandPalette: React.FC = () => {
     );
   }, [availableFiles, query, mode]);
 
-  const totalResults = mode === 'commands' ? filteredCommands.length : filteredFiles.length;
+  // Filter symbols
+  const filteredSymbols = useMemo(() => {
+    if (!isSymbolMode) return [];
+    return fuzzyFilter(
+      availableSymbols,
+      symbolQuery,
+      (s) => s.name,
+      (s) => [s.kind, s.container_name || '']
+    );
+  }, [availableSymbols, symbolQuery, isSymbolMode]);
+
+  const totalResults = isSymbolMode
+    ? filteredSymbols.length
+    : mode === 'commands'
+    ? filteredCommands.length
+    : filteredFiles.length;
 
   // Auto-scroll selected item into view
   useEffect(() => {
@@ -168,6 +213,17 @@ export const CommandPalette: React.FC = () => {
     }
   };
 
+  const handleSelectSymbol = (sym: LspSymbol) => {
+    close();
+    if (activeBufferId) {
+      useEditorStore.getState().updateCursor(
+        activeBufferId,
+        sym.range.start_line + 1,
+        sym.range.start_character + 1
+      );
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -179,7 +235,9 @@ export const CommandPalette: React.FC = () => {
       e.preventDefault();
       if (totalResults === 0) return;
 
-      if (mode === 'commands' && filteredCommands[selectedIndex]) {
+      if (isSymbolMode && filteredSymbols[selectedIndex]) {
+        handleSelectSymbol(filteredSymbols[selectedIndex].item);
+      } else if (mode === 'commands' && filteredCommands[selectedIndex]) {
         handleSelectCommand(filteredCommands[selectedIndex].item);
       } else if (mode === 'files' && filteredFiles[selectedIndex]) {
         handleSelectFile(filteredFiles[selectedIndex].item.relPath);
@@ -189,11 +247,16 @@ export const CommandPalette: React.FC = () => {
       close();
     } else if (e.key === 'Tab') {
       e.preventDefault();
-      const nextMode: PaletteMode = mode === 'commands' ? 'files' : 'commands';
-      setMode(nextMode);
+      const cycleMode = (curr: PaletteMode): PaletteMode => {
+        if (curr === 'commands') return 'files';
+        if (curr === 'files') return 'symbols';
+        return 'commands';
+      };
+      setMode(cycleMode(mode));
     } else if (e.key === 'Backspace' && query === '') {
-      // Toggle mode if backspacing on empty query
-      if (mode === 'commands') {
+      if (mode === 'symbols') {
+        setMode('files');
+      } else if (mode === 'commands') {
         setMode('files');
       }
     }
@@ -248,7 +311,9 @@ export const CommandPalette: React.FC = () => {
       >
         {/* Top Search Bar */}
         <div className="flex items-center gap-2.5 px-4 py-3 border-b border-ide-border/80 bg-ide-bg/80">
-          {mode === 'commands' ? (
+          {isSymbolMode ? (
+            <Code2 size={18} className="text-cyan-400 flex-shrink-0" />
+          ) : mode === 'commands' ? (
             <Terminal size={18} className="text-ide-accent flex-shrink-0" />
           ) : (
             <Search size={18} className="text-amber-400 flex-shrink-0" />
@@ -257,15 +322,21 @@ export const CommandPalette: React.FC = () => {
           <div className="flex items-center gap-1.5 flex-1">
             <button
               type="button"
-              onClick={() => setMode(mode === 'commands' ? 'files' : 'commands')}
+              onClick={() => {
+                if (mode === 'commands') setMode('files');
+                else if (mode === 'files') setMode('symbols');
+                else setMode('commands');
+              }}
               className={`px-1.5 py-0.5 rounded text-[11px] font-mono uppercase tracking-wider font-semibold border transition ${
-                mode === 'commands'
+                isSymbolMode
+                  ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 hover:bg-cyan-500/30'
+                  : mode === 'commands'
                   ? 'bg-ide-accent/20 border-ide-accent/50 text-ide-accent hover:bg-ide-accent/30'
                   : 'bg-amber-500/20 border-amber-500/50 text-amber-300 hover:bg-amber-500/30'
               }`}
               title="Click or press Tab to switch mode"
             >
-              {mode === 'commands' ? '> Commands' : '📄 Files'}
+              {isSymbolMode ? '@ Symbols' : mode === 'commands' ? '> Commands' : '📄 Files'}
             </button>
 
             <input
@@ -275,7 +346,9 @@ export const CommandPalette: React.FC = () => {
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={
-                mode === 'commands'
+                isSymbolMode
+                  ? 'Type symbol name to jump in editor...'
+                  : mode === 'commands'
                   ? 'Type a command name or category...'
                   : 'Search files by name or relative path...'
               }
@@ -303,11 +376,61 @@ export const CommandPalette: React.FC = () => {
           {totalResults === 0 ? (
             <div className="py-8 text-center text-ide-textMuted text-sm flex flex-col items-center gap-2">
               <Search size={24} className="opacity-40" />
-              <span>No matching {mode === 'commands' ? 'commands' : 'files'} found</span>
+              <span>No matching {isSymbolMode ? 'symbols' : mode === 'commands' ? 'commands' : 'files'} found</span>
               <span className="text-xs text-ide-textMuted/60">
-                {mode === 'commands' ? 'Try typing a keyword or press Tab to search files' : 'Type > to switch to commands'}
+                {isSymbolMode
+                  ? 'No symbols found in current active document'
+                  : mode === 'commands'
+                  ? 'Try typing a keyword or press Tab to search files'
+                  : 'Type > for commands, @ for symbols'}
               </span>
             </div>
+          ) : isSymbolMode ? (
+            filteredSymbols.map((match, idx) => {
+              const sym = match.item;
+              const isSelected = idx === selectedIndex;
+              const segments = fuzzyHighlight(sym.name, match.matchedIndices);
+
+              return (
+                <div
+                  key={`${sym.name}_${sym.range.start_line}_${idx}`}
+                  ref={(el) => (itemRefs.current[idx] = el)}
+                  onClick={() => handleSelectSymbol(sym)}
+                  onMouseEnter={() => setSelectedIndex(idx)}
+                  className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition text-sm ${
+                    isSelected
+                      ? 'bg-cyan-500/15 text-ide-textBright border-l-2 border-cyan-500 pl-2.5'
+                      : 'text-ide-text hover:bg-ide-hover/50'
+                  }`}
+                  data-testid={`palette-symbol-${sym.name}`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <Code2 size={15} className="text-cyan-400 flex-shrink-0" />
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="truncate font-mono">
+                        {segments.map((seg, sIdx) => (
+                          <span
+                            key={sIdx}
+                            className={seg.isMatch ? 'text-cyan-400 font-semibold underline decoration-cyan-400/50' : ''}
+                          >
+                            {seg.text}
+                          </span>
+                        ))}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded border border-cyan-800/50 bg-cyan-950/40 text-cyan-300 font-mono uppercase">
+                      {sym.kind}
+                    </span>
+                    <span className="text-[11px] font-mono text-ide-textMuted">
+                      Ln {sym.range.start_line + 1}
+                    </span>
+                  </div>
+                </div>
+              );
+            })
           ) : mode === 'commands' ? (
             filteredCommands.map((match, idx) => {
               const cmd = match.item;

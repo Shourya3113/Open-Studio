@@ -47,3 +47,16 @@ export interface DetectedServer {
   install_hint: string;
 }
 
+export interface LspSymbol {
+  name: string;
+  kind: string;
+  range: LspRange;
+  container_name?: string | null;
+  file_path: string;
+}
+
+export interface LspHighlight {
+  range: LspRange;
+  kind: 'text' | 'read' | 'write' | string;
+}
+

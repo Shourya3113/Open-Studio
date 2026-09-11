@@ -15,6 +15,7 @@ export interface DefaultCommandsContext {
   openProblemsTab?: () => void;
   openSettingsModal?: () => void;
   openOnboardingModal?: () => void;
+  openSymbolsPalette?: () => void;
 }
 
 export function createDefaultCommands(ctx: DefaultCommandsContext): PaletteCommand[] {
@@ -257,6 +258,19 @@ export function createDefaultCommands(ctx: DefaultCommandsContext): PaletteComma
       handler: () => {
         if (ctx.resetLayout) {
           ctx.resetLayout();
+        }
+      },
+    },
+
+    {
+      id: 'workbench:goto-symbol',
+      title: 'Go to Symbol in Editor...',
+      category: 'View',
+      shortcut: 'Ctrl+Shift+O',
+      keywords: ['symbol', 'goto', 'outline', 'function', 'class', 'method', 'variable'],
+      handler: () => {
+        if (ctx.openSymbolsPalette) {
+          ctx.openSymbolsPalette();
         }
       },
     },

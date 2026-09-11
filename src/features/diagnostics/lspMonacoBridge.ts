@@ -1,11 +1,19 @@
 import * as monaco from 'monaco-editor';
-import { LspDiagnostic, LspLocation } from '../../types/lsp';
+import { LspDiagnostic, LspLocation, LspSymbol } from '../../types/lsp';
 import { DiagnosticItem } from '../../types/diagnostics';
 import { toMonacoSeverity } from './monacoBridge';
 import { normalizeDiagnosticPath } from './parser';
 import { useDiagnosticsStore } from '../../stores/diagnosticsStore';
 import { useEditorStore } from '../../stores/editorStore';
-import { requestLspHover, requestLspDefinition, requestLspDiagnostics } from '../lsp/lspClient';
+import {
+  requestLspHover,
+  requestLspDefinition,
+  requestLspDiagnostics,
+  requestLspDocumentSymbols,
+  requestLspWorkspaceSymbols,
+  requestLspDocumentHighlights,
+  requestLspReferences,
+} from '../lsp/lspClient';
 
 export const LSP_DIAGNOSTICS_OWNER = 'open-studio-lsp';
 
@@ -172,6 +180,136 @@ export function createLspDefinitionProvider(): monaco.languages.DefinitionProvid
 }
 
 /**
+ * Maps LSP symbol kind string to Monaco SymbolKind enum
+ */
+export function mapSymbolKind(kind: string): monaco.languages.SymbolKind {
+  switch (kind.toLowerCase()) {
+    case 'function':
+    case 'method':
+      return monaco.languages.SymbolKind.Function;
+    case 'class':
+    case 'struct':
+      return monaco.languages.SymbolKind.Class;
+    case 'interface':
+    case 'trait':
+      return monaco.languages.SymbolKind.Interface;
+    case 'enum':
+      return monaco.languages.SymbolKind.Enum;
+    case 'variable':
+    case 'constant':
+      return monaco.languages.SymbolKind.Variable;
+    default:
+      return monaco.languages.SymbolKind.Property;
+  }
+}
+
+/**
+ * Creates a Monaco DocumentHighlightProvider for occurrences of the active symbol
+ */
+export function createLspDocumentHighlightProvider(): monaco.languages.DocumentHighlightProvider {
+  return {
+    provideDocumentHighlights: async (model, position) => {
+      const filePath = model.uri.path || model.uri.fsPath;
+      const language = model.getLanguageId();
+      const line = position.lineNumber - 1;
+      const character = position.column - 1;
+
+      const highlights = await requestLspDocumentHighlights(language, filePath, line, character);
+      if (!highlights || highlights.length === 0) return [];
+
+      return highlights.map((h) => ({
+        range: new monaco.Range(
+          h.range.start_line + 1,
+          h.range.start_character + 1,
+          h.range.end_line + 1,
+          h.range.end_character + 1
+        ),
+        kind:
+          h.kind === 'write'
+            ? monaco.languages.DocumentHighlightKind.Write
+            : monaco.languages.DocumentHighlightKind.Read,
+      }));
+    },
+  };
+}
+
+/**
+ * Creates a Monaco ReferenceProvider for Find All References (Shift+F12)
+ */
+export function createLspReferenceProvider(): monaco.languages.ReferenceProvider {
+  return {
+    provideReferences: async (model, position, context) => {
+      const filePath = model.uri.path || model.uri.fsPath;
+      const language = model.getLanguageId();
+      const line = position.lineNumber - 1;
+      const character = position.column - 1;
+
+      const locations = await requestLspReferences(
+        language,
+        filePath,
+        line,
+        character,
+        context?.includeDeclaration ?? true
+      );
+      if (!locations || locations.length === 0) return [];
+
+      return locations.map((loc) => ({
+        uri: monaco.Uri.file(loc.file_path),
+        range: new monaco.Range(
+          loc.range.start_line + 1,
+          loc.range.start_character + 1,
+          loc.range.end_line + 1,
+          loc.range.end_character + 1
+        ),
+      }));
+    },
+  };
+}
+
+/**
+ * Creates a Monaco DocumentSymbolProvider for document outline and symbols
+ */
+export function createLspDocumentSymbolProvider(): monaco.languages.DocumentSymbolProvider {
+  return {
+    provideDocumentSymbols: async (model) => {
+      const filePath = model.uri.path || model.uri.fsPath;
+      const language = model.getLanguageId();
+
+      const symbols = await requestLspDocumentSymbols(language, filePath);
+      if (!symbols || symbols.length === 0) return [];
+
+      return symbols.map((s) => {
+        const range = new monaco.Range(
+          s.range.start_line + 1,
+          s.range.start_character + 1,
+          s.range.end_line + 1,
+          s.range.end_character + 1
+        );
+        return {
+          name: s.name,
+          detail: s.kind,
+          kind: mapSymbolKind(s.kind),
+          tags: [],
+          range,
+          selectionRange: range,
+          children: [],
+        };
+      });
+    },
+  };
+}
+
+/**
+ * Queries symbols across the active LSP workspace
+ */
+export async function queryWorkspaceSymbols(
+  language: string,
+  query: string
+): Promise<LspSymbol[]> {
+  return requestLspWorkspaceSymbols(language, query);
+}
+
+/**
  * Navigates to an LSP location by opening target file and positioning cursor
  */
 export function navigateToLspLocation(location: LspLocation): string {
@@ -186,7 +324,7 @@ let isRegistered = false;
 let disposables: monaco.IDisposable[] = [];
 
 /**
- * Registers LSP Hover and Definition providers across all supported Monaco languages
+ * Registers LSP Hover, Definition, Highlight, Reference, and Symbol providers across all supported Monaco languages
  */
 export function registerLspLanguageFeatures(): monaco.IDisposable[] {
   if (isRegistered) return disposables;
@@ -194,10 +332,16 @@ export function registerLspLanguageFeatures(): monaco.IDisposable[] {
 
   const hoverProvider = createLspHoverProvider();
   const defProvider = createLspDefinitionProvider();
+  const highlightProvider = createLspDocumentHighlightProvider();
+  const refProvider = createLspReferenceProvider();
+  const symbolProvider = createLspDocumentSymbolProvider();
 
   for (const lang of SUPPORTED_LSP_LANGUAGES) {
     disposables.push(monaco.languages.registerHoverProvider(lang, hoverProvider));
     disposables.push(monaco.languages.registerDefinitionProvider(lang, defProvider));
+    disposables.push(monaco.languages.registerDocumentHighlightProvider(lang, highlightProvider));
+    disposables.push(monaco.languages.registerReferenceProvider(lang, refProvider));
+    disposables.push(monaco.languages.registerDocumentSymbolProvider(lang, symbolProvider));
   }
 
   return disposables;

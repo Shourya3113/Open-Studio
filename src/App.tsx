@@ -215,6 +215,7 @@ export default function App() {
         openCheckpointModal: () => setIsCheckpointModalOpen(true),
         openSettingsModal: () => useSettingsStore.getState().openModal(),
         openOnboardingModal: () => useSettingsStore.getState().openOnboarding(),
+        openSymbolsPalette: () => usePaletteStore.getState().open('symbols'),
         saveWorkspace: () => {
           const state = extractCurrentWorkspaceState({
             sidebarWidth,
@@ -237,7 +238,7 @@ export default function App() {
     return unregister;
   }, [sidebarWidth, bottomPanelHeight, isSidebarOpen, isBottomPanelOpen, activeTab]);
 
-  // Global IDE shortcuts: Ctrl+Shift+P / F1 (Commands), Ctrl+P (Quick Open), Ctrl+Shift+M (Problems), Ctrl+` (Terminal), Ctrl+B (Sidebar)
+  // Global IDE shortcuts: Ctrl+Shift+P / F1 (Commands), Ctrl+P (Quick Open), Ctrl+Shift+O (Go to Symbol), Ctrl+Shift+M (Problems), Ctrl+` (Terminal), Ctrl+B (Sidebar)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Command Palette (Commands mode): Ctrl+Shift+P, Cmd+Shift+P, F1
@@ -247,6 +248,13 @@ export default function App() {
       ) {
         e.preventDefault();
         usePaletteStore.getState().open('commands');
+        return;
+      }
+
+      // Command Palette (Go to Symbol mode): Ctrl+Shift+O, Cmd+Shift+O
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'o') {
+        e.preventDefault();
+        usePaletteStore.getState().open('symbols');
         return;
       }
 
