@@ -10,9 +10,11 @@ import {
   Search,
   Trash2,
   Filter,
+  Sparkles,
 } from 'lucide-react';
 import { useDiagnosticsStore } from '../../stores/diagnosticsStore';
 import { useEditorStore } from '../../stores/editorStore';
+import { useDiagnosticRepairStore } from '../../stores/diagnosticRepairStore';
 import { DiagnosticItem, DiagnosticSeverity } from '../../types/diagnostics';
 
 interface ProblemsPanelProps {
@@ -210,31 +212,47 @@ export const ProblemsPanel: React.FC<ProblemsPanelProps> = () => {
                         <div
                           key={item.id}
                           onClick={() => handleJumpTo(item)}
-                          className={`flex items-start gap-2 px-2 py-1 rounded cursor-pointer transition text-[11px] ${
+                          className={`group flex items-start justify-between gap-2 px-2 py-1 rounded cursor-pointer transition text-[11px] ${
                             isSelected
                               ? 'bg-ide-accent/15 border-l-2 border-ide-accent text-ide-textBright'
                               : 'hover:bg-ide-hover/60 text-ide-text'
                           }`}
                         >
-                          <span className="mt-0.5">{renderSeverityIcon(item.severity)}</span>
+                          <div className="flex items-start gap-2 flex-1 min-w-0">
+                            <span className="mt-0.5">{renderSeverityIcon(item.severity)}</span>
 
-                          <div className="flex-1 min-w-0 font-sans">
-                            <span className="leading-snug break-words">{item.message}</span>
-                            {item.code && (
-                              <span className="ml-1.5 text-[10px] px-1 py-0.2 rounded bg-ide-surface font-mono text-ide-textMuted border border-ide-border/60">
-                                {item.code}
-                              </span>
-                            )}
-                            {item.source && (
-                              <span className="ml-1 text-[10px] text-ide-textMuted/60 font-mono">
-                                ({item.source})
-                              </span>
-                            )}
+                            <div className="flex-1 min-w-0 font-sans">
+                              <span className="leading-snug break-words">{item.message}</span>
+                              {item.code && (
+                                <span className="ml-1.5 text-[10px] px-1 py-0.2 rounded bg-ide-surface font-mono text-ide-textMuted border border-ide-border/60">
+                                  {item.code}
+                                </span>
+                              )}
+                              {item.source && (
+                                <span className="ml-1 text-[10px] text-ide-textMuted/60 font-mono">
+                                  ({item.source})
+                                </span>
+                              )}
+                            </div>
                           </div>
 
-                          <span className="text-ide-textMuted font-mono text-[10px] flex-shrink-0 ml-2">
-                            [{item.range.startLine}, {item.range.startColumn}]
-                          </span>
+                          <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                useDiagnosticRepairStore.getState().startRepairFromDiagnostic(item);
+                              }}
+                              className="opacity-0 group-hover:opacity-100 hover:opacity-100 px-1.5 py-0.5 rounded bg-ide-accent/20 hover:bg-ide-accent/40 text-ide-accent text-[10px] font-semibold transition flex items-center gap-1 border border-ide-accent/30"
+                              title="Diagnose & Repair with AI"
+                            >
+                              <Sparkles size={10} />
+                              <span>Fix</span>
+                            </button>
+
+                            <span className="text-ide-textMuted font-mono text-[10px]">
+                              [{item.range.startLine}, {item.range.startColumn}]
+                            </span>
+                          </div>
                         </div>
                       );
                     })}

@@ -18,7 +18,7 @@ import { useTerminalErrorStore } from '../../stores/terminalErrorStore';
 import { TerminalStreamAccumulator } from '../../features/terminal/errorCapture';
 import { CapturedTerminalError } from '../../types/terminal';
 import { useEditorStore } from '../../stores/editorStore';
-import { useChatStore } from '../../stores/chatStore';
+import { useDiagnosticRepairStore } from '../../stores/diagnosticRepairStore';
 
 export type BottomDockTab = 'terminal' | 'problems';
 
@@ -82,15 +82,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   };
 
   const handleFixWithAI = async (err: CapturedTerminalError) => {
-    const chatStore = useChatStore.getState();
-    const prompt = 
-      `Fix this ${err.tool.toUpperCase()} compilation error:\n` +
-      `File: ${err.filePath}${err.line ? `:${err.line}` : ''}\n` +
-      `Error: ${err.errorCode ? `[${err.errorCode}] ` : ''}${err.message}\n\n` +
-      (err.contextSnippet ? `Compiler Trace:\n\`\`\`\n${err.contextSnippet}\n\`\`\`\n\n` : '') +
-      `Please diagnose the root cause and provide a frugal search/replace diff to resolve this error.`;
-
-    await chatStore.sendMessage(prompt);
+    await useDiagnosticRepairStore.getState().startRepairFromTerminal(err);
   };
 
   const containerRef = useRef<HTMLDivElement>(null);

@@ -26,6 +26,7 @@ import { FileTree } from './components/sidebar/FileTree';
 import { TerminalPanel } from './components/terminal/TerminalPanel';
 import { ChatPanel } from './components/chat/ChatPanel';
 import { DiffReviewModal } from './components/diff/DiffReviewModal';
+import { DiagnosticRepairModal } from './components/terminal/DiagnosticRepairModal';
 import { CheckpointModal } from './components/git/CheckpointModal';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
@@ -779,6 +780,9 @@ export default function App() {
 
       {/* Monaco Multi-File Diff Review Modal */}
       <DiffReviewModal />
+
+      {/* AI Diagnostic Repair Modal */}
+      <DiagnosticRepairModal />
 
       {/* Shadow Git Checkpoint & Rollback Modal */}
       <CheckpointModal
