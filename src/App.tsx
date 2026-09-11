@@ -23,6 +23,7 @@ import { HardwareMemoryProfile } from './types/hardware';
 import { HardwareSentinelModal } from './components/inference/HardwareSentinelModal';
 import { EditorContainer } from './components/editor/EditorContainer';
 import { FileTree } from './components/sidebar/FileTree';
+import { CheckpointTimeline } from './components/sidebar/CheckpointTimeline';
 import { TerminalPanel } from './components/terminal/TerminalPanel';
 import { ChatPanel } from './components/chat/ChatPanel';
 import { DiffReviewModal } from './components/diff/DiffReviewModal';
@@ -531,6 +532,8 @@ export default function App() {
                 {activeTab === 'chat' && (
                   <ChatPanel inferenceHealth={inferenceHealth} />
                 )}
+
+                {activeTab === 'git' && <CheckpointTimeline />}
 
                 {activeTab === 'settings' && (
                   <div className="p-4 space-y-4">
