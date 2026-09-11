@@ -42,6 +42,25 @@ Open Studio has completed its **Phase 1 MVP Release (`v0.1.0`)**, fully implemen
 
 ---
 
+## 🧠 Phase 2 Intelligence Milestone (`v0.2.0-P2`) — Complete & Verified
+
+Open Studio has completed **Phase 2: Local Intelligence Engine & Air-Gapped Agent Workspace (Days 21–40, Weeks 5–8)**, delivering state-of-the-art offline code intelligence, multi-stage hybrid RAG, hardware memory sentinels, and an automated terminal self-healing repair loop:
+
+| Milestone / Week | Module & Capability | Key Technical Deliverables |
+| :--- | :--- | :--- |
+| **Week 5 (Days 21–25)** | **Hybrid AST & BM25 Codebase Search** | Tree-sitter AST slicer, signature extraction, code tokenization, incremental inverted index, dynamic context budget clamping |
+| **Week 6 (Days 26–30)** | **Multi-Stage RAG & Vector Embeddings** | Sliding-window chunking, local vector store (`nomic-embed-text`), Reciprocal Rank Fusion (RRF), cross-encoder re-ranking & noise reduction |
+| **Week 7 (Days 31–35)** | **Context Sentinel & Native LSP Bridge** | 4-tier hardware profiler (CUDA/ROCm/Metal/Vulkan/CPU), VRAM Memory Sentinel with idle model eviction, resident autocomplete pinning, Rust LSP client (`rust-analyzer`, `vtsls`, `pyright`, `gopls`) |
+| **Week 8 (Days 36–40)** | **Task-Based Router & Terminal Auto-Fix** | Dynamic intent router (`TaskType::TerminalFix`, `FastEdit`, etc.), PTY error capture engine (`cargo`, `tsc`, `pytest`, `npm`, `go`), 1-click "Fix & Verify ⚡" frugal diff repair, PTY command re-execution, 1-click Shadow Git rollback, bounded iterative self-healing (up to 3 attempts) |
+
+**Phase 2 Quality Gates & Validation**:
+- **Frontend Vitest Suite**: **306/306 passed** across all 51 test files (`npm test -- --run`)
+- **Rust Backend Suite**: **88/88 passed** (68 unit + 20 integration tests) with **0 compiler warnings** (`cargo test`)
+- **Typecheck & Production Build**: 100% clean compilation (`npx tsc --noEmit`) and Vite production bundle (`npm run build`)
+- **Strict 100% Air-Gapped Guarantees**: Complete offline operation, local AI model execution, and Shadow Git safety snapshots
+
+---
+
 ## 🏗 Architecture Blueprint
 
 ```

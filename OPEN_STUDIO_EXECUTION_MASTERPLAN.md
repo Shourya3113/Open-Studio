@@ -451,39 +451,48 @@ Phase 3: "It's Ready" Production & Distribution (Weeks 9–12)
 
 ---
 
-# PHASE 2: "IT'S SMART" INTELLIGENCE & CONTEXT (WEEKS 5–8)
+# PHASE 2: "IT'S SMART" INTELLIGENCE & CONTEXT (WEEKS 5–8) — COMPLETE (`v0.2.0-P2`)
 
 ---
 
-### Week 5: Progressive Codebase Indexing
+### Week 5: Progressive Codebase Indexing (Complete)
 - **Week Focus**: Tree-sitter AST structural slicing and BM25 lexical search for `@codebase` v1.
 - **Deliverables**:
-  - `src-tauri/src/ast/slicer.rs`: Tree-sitter parsers for TypeScript and Python stripping function bodies to generate 800-token repo skeletons.
+  - `src-tauri/src/ast/slicer.rs`: Tree-sitter parsers for TypeScript, Python, and Rust stripping function bodies to generate 800-token repo skeletons.
   - `src-tauri/src/rag/bm25.rs`: Fast in-memory BM25 lexical keyword search over workspace files for instant `@codebase` v1 queries without embeddings.
-- **Test Command**: `cd src-tauri && cargo test ast::slicer && cargo test rag::bm25`
+- **Verification**: 5/5 Rust tests + 9/9 Vitest tests passed.
 
-### Week 6: Vector RAG & Hybrid Retrieval (`@codebase` v2)
-- **Week Focus**: Local embeddings via `nomic-embed-text` and SQLite-vec for 2-stage hybrid search.
+### Week 6: Vector RAG & Hybrid Retrieval (`@codebase` v2) (Complete)
+- **Week Focus**: Local embeddings via `nomic-embed-text` and vector store for 3-stage hybrid search.
 - **Deliverables**:
-  - `src-tauri/src/rag/embeddings.rs` communicating with Ollama embedding API.
-  - `src-tauri/src/rag/sqlite_vec.rs` storing 40-line chunk vectors.
-  - 2-Stage Query Pipeline: Vector search (top 15 candidates) ➔ BM25 re-ranking (top 3 precise snippets).
-- **Test Command**: `cd src-tauri && cargo test rag::hybrid_retrieval`
+  - `src-tauri/src/rag/embeddings.rs` & `src/features/rag/embeddingClient.ts` communicating with Ollama embedding API.
+  - `src-tauri/src/rag/vector_store.rs` & `src/features/rag/vectorStore.ts` storing cosine-similarity chunk vectors.
+  - `src-tauri/src/rag/hybrid.rs` & `src/features/rag/hybridSearch.ts` 3-Stage Query Pipeline: Vector candidate search ➔ BM25 reciprocal rank fusion (RRF) ➔ Neural cross-encoder re-ranking and noise filtering.
+- **Verification**: 5/5 Rust tests + 5/5 Vitest tests passed.
 
-### Week 7: Language Server Protocol & Universal Memory Sentinel
-- **Week Focus**: Compiler-grade diagnostics via `lsp-types` crate and memory profiling.
+### Week 7: Language Server Protocol & Universal Memory Sentinel (Complete)
+- **Week Focus**: Compiler-grade diagnostics via `lsp-types` crate, dynamic context clamping, and hardware memory profiling.
 - **Deliverables**:
-  - `src-tauri/src/lsp/client.rs` using `lsp-types = "0.95"` for `typescript-language-server` and `pyright`.
-  - Monaco diagnostics bridge, hover info, and definition provider.
+  - `src-tauri/src/lsp/client.rs` & `src-tauri/src/lsp/detector.rs` using `lsp-types = "0.95"` for `rust-analyzer`, `vtsls`, `pyright`, `gopls`, `clangd`.
+  - Monaco diagnostics bridge, hover info, document symbols, and references provider (`src/features/diagnostics/lspMonacoBridge.ts`).
   - `src-tauri/src/hardware/profiler.rs` using `sysinfo` and Ollama `/api/ps` to classify system into Tier 1–4 and dynamically clamp context budgets.
-- **Test Command**: `cd src-tauri && cargo test lsp::client && cargo test hardware::profiler`
+  - `src-tauri/src/inference/swapper.rs` ModelSwapper with residency tracking, idle model eviction, and sub-40ms autocomplete pinning.
+- **Verification**: 5/5 Rust tests + 6/6 Vitest tests passed.
 
-### Week 8: Task-Based Model Router & Terminal Auto-Fix
-- **Week Focus**: Dynamic VRAM lifecycle orchestration and automated terminal error repair.
+### Week 8: Task-Based Model Router & Terminal Auto-Fix (Complete)
+- **Week Focus**: Dynamic VRAM lifecycle orchestration, PTY stream error capture, 1-click diagnostic repair loop, and interactive terminal verification.
 - **Deliverables**:
-  - `src-tauri/src/router/model_router.rs`: Typing -> 1.5B (pinned), Edit -> 7B (3m auto-eviction), Reasoning -> 8B (3m auto-eviction).
-  - `src/features/terminal/errorCapture.ts`: Regex parser for `pytest`, `cargo`, `npm`, `tsc` with 1-click "Fix with AI" repair loop.
-- **Test Command**: `cd src-tauri && cargo test router::model_router && cd .. && npm run test -- -t "errorCapture"`
+  - **Day 36**: `src-tauri/src/router/model_router.rs` & `src/features/router/taskRouter.ts`: Task-based intent router (`TaskType::TerminalFix`, `FastEdit`, `Reasoning`, `Autocomplete`, `GeneralChat`), fallback cascades, and keep-alive management.
+  - **Day 37**: `src/features/terminal/errorCapture.ts` & `src/stores/terminalErrorStore.ts`: Multi-line regex compiler parsers (`pytest`, `cargo`, `npm`, `tsc`, `python`, `go`), chunk boundary accumulator, deduplication, and terminal error cards.
+  - **Day 38**: `src/features/terminal/diagnosticRepair.ts` & `src/components/terminal/DiagnosticRepairModal.tsx`: 1-Click "Fix with AI ⚡" context window extraction, surgical frugal diff generation, and Shadow Git safety snapshotting.
+  - **Day 39**: `src/features/terminal/fixVerifier.ts` & `src/stores/diagnosticRepairStore.ts`: Native PTY command re-execution, multi-framework verification evaluation, 1-click auto-rollback, and bounded iterative self-healing (up to 3 attempts).
+  - **Day 40**: `src-tauri/tests/week8_integration.rs`, `src/week8_integration.test.ts`, and `src/features/terminal/benchmark.test.ts`: Complete Phase 2 integration test suites and performance benchmarks.
+- **Phase 2 Exit Gate Verification**:
+  - **Vitest Suite**: 306/306 tests passing across all 51 test files (`npm test -- --run`)
+  - **Rust Backend Suite**: 88/88 tests passing across all unit and integration suites (`cargo test`)
+  - **TypeScript Typecheck**: Code 0 (`npx tsc --noEmit`)
+  - **Production Build**: Clean bundle in 53.51s (`npm run build`)
+  - **Release Milestone**: `v0.2.0-P2` (Phase 2 Local Intelligence Engine)
 
 ---
 
