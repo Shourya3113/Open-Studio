@@ -7,6 +7,7 @@ pub mod git;
 pub mod ast;
 pub mod rag;
 pub mod lsp;
+pub mod hardware;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -17,6 +18,7 @@ pub fn run() {
         .manage(rag::create_bm25_state())
         .manage(rag::create_vector_store_state())
         .manage(lsp::create_lsp_state())
+        .manage(hardware::create_sentinel_state())
         .invoke_handler(tauri::generate_handler![
             commands::system::get_system_info,
             fs::read_workspace_tree,
@@ -72,7 +74,12 @@ pub fn run() {
             lsp::client::request_lsp_references,
             lsp::detector::detect_language_servers,
             lsp::detector::detect_server_for_file_cmd,
-            lsp::detector::auto_start_lsp_for_file
+            lsp::detector::auto_start_lsp_for_file,
+            hardware::get_hardware_memory_profile,
+            hardware::set_hardware_tier_override,
+            hardware::evict_model_from_sentinel,
+            hardware::evict_idle_models_from_sentinel,
+            hardware::get_clamped_context_budget
         ])
         .run(tauri::generate_context!())
         .expect("error while running Open Studio");

@@ -17,7 +17,9 @@ import { AppSystemInfo } from './types/system';
 import { InferenceHealth } from './types/inference';
 import { checkInferenceHealth } from './services/inference';
 import { autocompleteTracker, AutocompleteMetrics } from './features/autocomplete/benchmark';
-import { getHardwareTier, HardwareTierInfo, formatTokenBudget } from './features/inference/hardwareTier';
+import { formatTokenBudget } from './features/inference/hardwareTier';
+import { getHardwareMemoryProfile } from './features/hardware/memorySentinel';
+import { HardwareMemoryProfile } from './types/hardware';
 import { HardwareSentinelModal } from './components/inference/HardwareSentinelModal';
 import { EditorContainer } from './components/editor/EditorContainer';
 import { FileTree } from './components/sidebar/FileTree';
@@ -105,7 +107,7 @@ export default function App() {
   const setSelectedModel = useChatStore((s) => s.setSelectedModel);
 
   const [autocompleteMetrics, setAutocompleteMetrics] = useState<AutocompleteMetrics | null>(null);
-  const [hardwareTier, setHardwareTier] = useState<HardwareTierInfo | null>(null);
+  const [memoryProfile, setMemoryProfile] = useState<HardwareMemoryProfile | null>(null);
   const [isHardwareModalOpen, setIsHardwareModalOpen] = useState(false);
   const [isCheckpointModalOpen, setIsCheckpointModalOpen] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
@@ -154,12 +156,12 @@ export default function App() {
   const refreshInferenceTelemetry = useCallback(async () => {
     try {
       setIsReconnecting(true);
-      const [health, tier] = await Promise.all([
+      const [health, profile] = await Promise.all([
         checkInferenceHealth(),
-        getHardwareTier(),
+        getHardwareMemoryProfile(),
       ]);
       setInferenceHealth(health);
-      setHardwareTier(tier);
+      setMemoryProfile(profile);
       if (health.models.length > 0) {
         const currModel = useChatStore.getState().selectedModel;
         if (!health.models.some((m) => m.name === currModel)) {
@@ -681,16 +683,36 @@ export default function App() {
             className="flex items-center gap-1.5 cursor-pointer hover:bg-ide-hover px-1.5 py-0.5 rounded transition text-left" 
             title={
               inferenceHealth?.online 
-                ? `VRAM Sentinel: ${hardwareTier?.tier || 'Tier 3'} (${formatTokenBudget(hardwareTier?.context_budget || 8192)}). Click to manage VRAM & models.` 
+                ? `Memory Sentinel: ${memoryProfile?.tier || 'Tier 3'} [${memoryProfile ? formatTokenBudget(memoryProfile.clamped_context_budget) : '8k tokens'} ctx] • RAM ${memoryProfile ? Math.round(memoryProfile.ram_utilization_pct * 100) : 0}% • Pressure: ${memoryProfile?.memory_pressure || 'normal'}. Click to manage VRAM & processes.` 
                 : 'Ollama Offline. Click to view Sentinel diagnostics and start instructions.'
             }
           >
-            <span className={`w-2 h-2 rounded-full ${isReconnecting ? 'bg-amber-400 animate-spin' : inferenceHealth?.online ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`}></span>
-            <span className={isReconnecting ? 'text-amber-400' : inferenceHealth?.online ? 'text-emerald-400' : 'text-rose-400'}>
+            <span className={`w-2 h-2 rounded-full ${
+              isReconnecting 
+                ? 'bg-amber-400 animate-spin' 
+                : !inferenceHealth?.online 
+                  ? 'bg-rose-400' 
+                  : memoryProfile?.memory_pressure === 'critical' 
+                    ? 'bg-rose-400 animate-pulse' 
+                    : memoryProfile?.memory_pressure === 'moderate' 
+                      ? 'bg-amber-400' 
+                      : 'bg-emerald-400'
+            }`}></span>
+            <span className={
+              isReconnecting 
+                ? 'text-amber-400' 
+                : !inferenceHealth?.online 
+                  ? 'text-rose-400' 
+                  : memoryProfile?.memory_pressure === 'critical'
+                    ? 'text-rose-400 font-semibold'
+                    : memoryProfile?.memory_pressure === 'moderate'
+                      ? 'text-amber-300'
+                      : 'text-emerald-400'
+            }>
               {isReconnecting 
                 ? '🟡 Reconnecting...' 
                 : inferenceHealth?.online 
-                  ? `AI: ${selectedModel} • Tier ${hardwareTier?.tier_number || 3} [${hardwareTier ? formatTokenBudget(hardwareTier.context_budget) : '8k'}]` 
+                  ? `AI: ${selectedModel} • Tier ${memoryProfile?.tier_number || 3} [${memoryProfile ? formatTokenBudget(memoryProfile.clamped_context_budget) : '8k'}] • ${memoryProfile ? Math.round(memoryProfile.ram_utilization_pct * 100) : 0}% RAM` 
                   : '🔴 Ollama Offline'}
             </span>
           </button>

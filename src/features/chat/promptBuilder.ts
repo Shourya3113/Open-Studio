@@ -80,14 +80,18 @@ export async function augmentPromptWithContext(
   let contextSummary: InjectedContextSummary | undefined;
 
   const { aggregateContext, resultToSummary } = await import('../rag/contextAggregator');
+  const { getClampedContextBudget } = await import('../hardware/memorySentinel');
   const cleanQuery = userQuery.replace(/@(codebase|repo|skeleton|search)/gi, '').trim() || 'main';
+
+  const safeTotalBudget = await getClampedContextBudget().catch(() => 8192);
+  const dynamicBudget = Math.max(1500, Math.min(4000, Math.floor(safeTotalBudget * 0.4)));
 
   const aggResult = await aggregateContext({
     query: cleanQuery,
     active_file: activeFile,
     open_files: openFiles,
     include_skeleton: hasRepoTag,
-    max_tokens: 3000,
+    max_tokens: dynamicBudget,
     max_snippets: 5,
   });
 
@@ -131,7 +135,7 @@ export async function augmentPromptWithContext(
       contextSummary = {
         query: cleanQuery,
         totalTokens: items.reduce((sum, item) => sum + item.tokenCount, 0),
-        budgetTokens: 3000,
+        budgetTokens: dynamicBudget,
         items,
         referencedFiles: uniqueFiles,
         rawContextText: formattedLines.join('\n'),
