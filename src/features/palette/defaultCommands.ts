@@ -16,6 +16,7 @@ export interface DefaultCommandsContext {
   openSettingsModal?: () => void;
   openOnboardingModal?: () => void;
   openSymbolsPalette?: () => void;
+  openAuditModal?: () => void;
 }
 
 export function createDefaultCommands(ctx: DefaultCommandsContext): PaletteCommand[] {
@@ -298,6 +299,18 @@ export function createDefaultCommands(ctx: DefaultCommandsContext): PaletteComma
       handler: () => {
         if (ctx.openOnboardingModal) {
           ctx.openOnboardingModal();
+        }
+      },
+    },
+    // --- Security & Audit ---
+    {
+      id: 'security:audit-log',
+      title: 'Security: Open Audit Log & Tamper-Evident Inspector',
+      category: 'Security',
+      keywords: ['audit', 'security', 'log', 'ledger', 'hash', 'tamper', 'sha256', 'sqlite', 'inspect'],
+      handler: () => {
+        if (ctx.openAuditModal) {
+          ctx.openAuditModal();
         }
       },
     },

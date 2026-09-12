@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useAuditStore } from '../../stores/auditStore';
+import { logConfigChange } from '../../features/security/auditLogger';
 import { EditorTheme, WordWrapSetting } from '../../types/settings';
 
 export const SettingsModal: React.FC = () => {
@@ -51,7 +53,7 @@ export const SettingsModal: React.FC = () => {
   if (!isModalOpen) return null;
 
   const handleSave = () => {
-    updateSettings({
+    const updated = {
       ollamaEndpoint: ollamaEndpoint.trim() || 'http://localhost:11434',
       autocompleteModel: autocompleteModel.trim() || 'qwen2.5-coder:1.5b',
       chatModel: chatModel.trim() || 'qwen2.5-coder:7b',
@@ -63,7 +65,9 @@ export const SettingsModal: React.FC = () => {
       theme,
       wordWrap,
       formatOnSave,
-    });
+    };
+    updateSettings(updated);
+    logConfigChange('settings_updated', updated).catch(() => {});
     setSavedSuccess(true);
     setTimeout(() => {
       closeModal();
@@ -72,6 +76,7 @@ export const SettingsModal: React.FC = () => {
 
   const handleReset = () => {
     resetToDefaults();
+    logConfigChange('settings_reset_to_defaults', {}).catch(() => {});
     setSavedSuccess(true);
     setTimeout(() => {
       closeModal();
@@ -305,15 +310,35 @@ export const SettingsModal: React.FC = () => {
           {/* Section: Privacy & Air-Gap */}
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-[#4ec9b0] mb-3">
-              🔒 Privacy & Air-Gap Compliance
+              🔒 Privacy, Air-Gap & Audit
             </h3>
-            <div className="bg-[#252526] p-4 rounded border border-[#2d2d30] flex items-start gap-3">
-              <span className="text-xl">🛡️</span>
-              <div className="text-xs">
-                <div className="font-semibold text-white">Zero-Telemetry Core Enforced</div>
-                <p className="text-[#858585] mt-0.5">
-                  Open Studio does not make external network requests, load remote analytics, or upload code snippets. Strict Content Security Policy (CSP) restricts connections exclusively to local loopback (<code className="text-[#4ec9b0]">localhost:11434</code>).
-                </p>
+            <div className="bg-[#252526] p-4 rounded border border-[#2d2d30] space-y-3">
+              <div className="flex items-start gap-3">
+                <span className="text-xl">🛡️</span>
+                <div className="text-xs">
+                  <div className="font-semibold text-white">Zero-Telemetry Core Enforced</div>
+                  <p className="text-[#858585] mt-0.5">
+                    Open Studio does not make external network requests, load remote analytics, or upload code snippets. Strict Content Security Policy (CSP) restricts connections exclusively to local loopback (<code className="text-[#4ec9b0]">localhost:11434</code>).
+                  </p>
+                </div>
+              </div>
+              <div className="pt-3 border-t border-[#3e3e42]/40 flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-semibold text-white">Tamper-Evident Audit Ledger</div>
+                  <p className="text-[11px] text-[#858585]">
+                    Cryptographic SHA-256 hash-chained security log encrypted at rest with SQLite export.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeModal();
+                    useAuditStore.getState().open();
+                  }}
+                  className="px-3 py-1.5 text-xs font-medium text-[#4ec9b0] border border-[#4ec9b0]/50 hover:bg-[#4ec9b0]/10 rounded transition-colors whitespace-nowrap"
+                >
+                  View Audit Log
+                </button>
               </div>
             </div>
           </div>

@@ -33,9 +33,11 @@ import { DiagnosticRepairModal } from './components/terminal/DiagnosticRepairMod
 import { CheckpointModal } from './components/git/CheckpointModal';
 import { CheckpointInspectorModal } from './components/git/CheckpointInspectorModal';
 import { SettingsModal } from './components/settings/SettingsModal';
+import { AuditLogModal } from './components/security/AuditLogModal';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import { CommandPalette } from './components/palette/CommandPalette';
 import { useSettingsStore } from './stores/settingsStore';
+import { useAuditStore } from './stores/auditStore';
 import { usePaletteStore } from './stores/paletteStore';
 import { createDefaultCommands } from './features/palette/defaultCommands';
 import { useEditorStore } from './stores/editorStore';
@@ -225,6 +227,7 @@ export default function App() {
         },
         openHardwareModal: () => setIsHardwareModalOpen(true),
         openCheckpointModal: () => setIsCheckpointModalOpen(true),
+        openAuditModal: () => useAuditStore.getState().open(),
         openSettingsModal: () => useSettingsStore.getState().openModal(),
         openOnboardingModal: () => useSettingsStore.getState().openOnboarding(),
         openSymbolsPalette: () => usePaletteStore.getState().open('symbols'),
@@ -872,6 +875,9 @@ export default function App() {
 
       {/* Settings & Preferences Modal (Ctrl+,) */}
       <SettingsModal />
+
+      {/* Cryptographic Audit Log & Tamper-Evident Inspector */}
+      <AuditLogModal />
 
       {/* First-Run Onboarding Wizard */}
       <OnboardingWizard />
