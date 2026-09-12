@@ -29,6 +29,7 @@ import { ChatPanel } from './components/chat/ChatPanel';
 import { DiffReviewModal } from './components/diff/DiffReviewModal';
 import { DiagnosticRepairModal } from './components/terminal/DiagnosticRepairModal';
 import { CheckpointModal } from './components/git/CheckpointModal';
+import { CheckpointInspectorModal } from './components/git/CheckpointInspectorModal';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import { CommandPalette } from './components/palette/CommandPalette';
@@ -792,6 +793,9 @@ export default function App() {
         isOpen={isCheckpointModalOpen}
         onClose={() => setIsCheckpointModalOpen(false)}
       />
+
+      {/* Checkpoint Commit Inspector & Granular Revert Modal */}
+      <CheckpointInspectorModal />
 
       {/* Command Palette & Quick Open Modal */}
       <CommandPalette />

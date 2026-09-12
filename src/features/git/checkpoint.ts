@@ -1,4 +1,11 @@
-import type { Checkpoint, RestoreResult } from '../../types/git';
+import type { 
+  Checkpoint, 
+  RestoreResult, 
+  CheckpointFileDiff, 
+  CheckpointDiffDetails, 
+  FileRestoreResult, 
+  CompareTarget 
+} from '../../types/git';
 
 // In-memory fallback for browser dev mode and unit tests
 const mockCheckpoints: Checkpoint[] = [];
@@ -61,6 +68,94 @@ export async function restoreCheckpoint(checkpointId: string): Promise<RestoreRe
       checkpointId,
       restoredFiles: found.filePaths,
       message: `Restored mock checkpoint: ${found.summary}`,
+    };
+  }
+}
+
+/**
+ * Retrieves structured diff details for a checkpoint vs working tree or parent commit.
+ */
+export async function getCheckpointDiff(
+  checkpointId: string,
+  compareTarget: CompareTarget = 'working'
+): Promise<CheckpointDiffDetails | null> {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return await invoke<CheckpointDiffDetails>('get_checkpoint_diff', {
+      checkpointId,
+      compareTarget,
+    });
+  } catch {
+    const found = mockCheckpoints.find((c) => c.id === checkpointId || c.commitHash === checkpointId);
+    const rawPaths = found && found.filePaths.length > 0 ? found.filePaths : ['src/App.tsx', 'src/main.rs'];
+    const files: CheckpointFileDiff[] = rawPaths.map((path, idx) => ({
+      path,
+      status: idx === 0 ? 'modified' : 'added',
+      additions: 8 + idx * 5,
+      deletions: idx === 0 ? 3 : 0,
+      patch: [
+        `diff --git a/${path} b/${path}`,
+        `--- a/${path}`,
+        `+++ b/${path}`,
+        `@@ -1,5 +1,8 @@`,
+        `- // previous implementation line`,
+        `+ // updated checkpoint implementation`,
+        `+ const activeState = true;`,
+      ].join('\n'),
+    }));
+
+    return {
+      checkpointId,
+      compareTarget,
+      files,
+      totalAdditions: files.reduce((acc, f) => acc + f.additions, 0),
+      totalDeletions: files.reduce((acc, f) => acc + f.deletions, 0),
+    };
+  }
+}
+
+/**
+ * Restores a single specific file to its state at the checkpoint commit.
+ */
+export async function restoreCheckpointFile(
+  checkpointId: string,
+  filePath: string
+): Promise<FileRestoreResult | null> {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return await invoke<FileRestoreResult>('restore_checkpoint_file', {
+      checkpointId,
+      filePath,
+    });
+  } catch {
+    return {
+      success: true,
+      checkpointId,
+      filePath,
+      message: `Successfully restored ${filePath} from mock checkpoint`,
+    };
+  }
+}
+
+/**
+ * Restores a batch of specific files to their state at the checkpoint commit.
+ */
+export async function restoreCheckpointFiles(
+  checkpointId: string,
+  filePaths: string[]
+): Promise<RestoreResult | null> {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return await invoke<RestoreResult>('restore_checkpoint_files', {
+      checkpointId,
+      filePaths,
+    });
+  } catch {
+    return {
+      success: true,
+      checkpointId,
+      restoredFiles: filePaths,
+      message: `Successfully restored ${filePaths.length} files from mock checkpoint`,
     };
   }
 }

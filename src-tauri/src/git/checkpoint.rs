@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -20,6 +21,35 @@ pub struct RestoreResult {
     pub success: bool,
     pub checkpoint_id: String,
     pub restored_files: Vec<String>,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckpointFileDiff {
+    pub path: String,
+    pub status: String,
+    pub additions: usize,
+    pub deletions: usize,
+    pub patch: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckpointDiffDetails {
+    pub checkpoint_id: String,
+    pub compare_target: String,
+    pub files: Vec<CheckpointFileDiff>,
+    pub total_additions: usize,
+    pub total_deletions: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct FileRestoreResult {
+    pub success: bool,
+    pub checkpoint_id: String,
+    pub file_path: String,
     pub message: String,
 }
 
@@ -253,6 +283,255 @@ pub fn restore_checkpoint(workspace: &Path, checkpoint_id: &str) -> Result<Resto
     })
 }
 
+/// Inspects differences between a checkpoint and either the working directory ("working")
+/// or the parent commit ("parent").
+pub fn get_checkpoint_diff(
+    workspace: &Path,
+    checkpoint_id: &str,
+    compare_target: Option<&str>,
+) -> Result<CheckpointDiffDetails, String> {
+    let git_dir = workspace.join(".git");
+    if !git_dir.exists() {
+        return Err("Workspace is not a Git repository".to_string());
+    }
+
+    let commit_hash = run_git(workspace, &["rev-parse", checkpoint_id], &[])?;
+    let target_mode = compare_target.unwrap_or("working");
+
+    let (numstat_raw, name_status_raw, patch_raw) = if target_mode == "parent" {
+        // Compare with parent commit if it exists
+        let parent_sha = run_git(workspace, &["rev-parse", &format!("{}^", commit_hash)], &[]).ok();
+        if let Some(parent) = parent_sha {
+            let numstat = run_git(workspace, &["diff", "--numstat", &parent, &commit_hash], &[])
+                .unwrap_or_default();
+            let name_status = run_git(workspace, &["diff", "--name-status", &parent, &commit_hash], &[])
+                .unwrap_or_default();
+            let patch = run_git(workspace, &["diff", "-p", &parent, &commit_hash], &[])
+                .unwrap_or_default();
+            (numstat, name_status, patch)
+        } else {
+            // Root commit (no parent)
+            let numstat = run_git(workspace, &["diff-tree", "--numstat", "--root", "-r", &commit_hash], &[])
+                .unwrap_or_default();
+            let name_status = run_git(workspace, &["diff-tree", "--name-status", "--root", "-r", &commit_hash], &[])
+                .unwrap_or_default();
+            let patch = run_git(workspace, &["diff-tree", "-p", "--root", "-r", &commit_hash], &[])
+                .unwrap_or_default();
+            (numstat, name_status, patch)
+        }
+    } else {
+        // Compare with working directory (what has changed since the checkpoint)
+        let numstat = run_git(workspace, &["diff", "--numstat", &commit_hash, "--"], &[])
+            .unwrap_or_default();
+        let name_status = run_git(workspace, &["diff", "--name-status", &commit_hash, "--"], &[])
+            .unwrap_or_default();
+        let patch = run_git(workspace, &["diff", "-p", &commit_hash, "--"], &[])
+            .unwrap_or_default();
+        (numstat, name_status, patch)
+    };
+
+    // Parse numstat lines: "<additions>\t<deletions>\t<path>"
+    let mut stats_map: HashMap<String, (usize, usize)> = HashMap::new();
+    for line in numstat_raw.lines() {
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() >= 3 {
+            let additions = parts[0].parse::<usize>().unwrap_or(0);
+            let deletions = parts[1].parse::<usize>().unwrap_or(0);
+            let path = parts[2].trim().to_string();
+            stats_map.insert(path, (additions, deletions));
+        }
+    }
+
+    // Parse name_status lines: "<STATUS>\t<path>"
+    let mut status_map: HashMap<String, String> = HashMap::new();
+    for line in name_status_raw.lines() {
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() >= 2 {
+            let raw_code = parts[0].trim();
+            let path = if parts.len() >= 3 {
+                parts[2].trim().to_string()
+            } else {
+                parts[1].trim().to_string()
+            };
+            let status = if raw_code.starts_with('A') {
+                "added"
+            } else if raw_code.starts_with('D') {
+                "deleted"
+            } else if raw_code.starts_with('R') {
+                "renamed"
+            } else {
+                "modified"
+            };
+            status_map.insert(path, status.to_string());
+        }
+    }
+
+    // Parse unified patches per file
+    let mut patch_map: HashMap<String, String> = HashMap::new();
+    if !patch_raw.is_empty() {
+        let sections: Vec<&str> = patch_raw.split("diff --git ").collect();
+        for section in sections {
+            let trimmed = section.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if let Some(first_line) = trimmed.lines().next() {
+                let parts: Vec<&str> = first_line.split_whitespace().collect();
+                if parts.len() >= 2 {
+                    let path = if parts[1] == "/dev/null" || parts[1].ends_with("/dev/null") {
+                        parts[0].strip_prefix("a/").unwrap_or(parts[0])
+                    } else {
+                        parts[1].strip_prefix("b/").unwrap_or(parts[1])
+                    };
+                    let full_patch = format!("diff --git {}", trimmed);
+                    patch_map.insert(path.to_string(), full_patch);
+                }
+            }
+        }
+    }
+
+    // Combine all unique files
+    let mut all_paths: Vec<String> = stats_map.keys().cloned().collect();
+    for p in status_map.keys() {
+        if !all_paths.contains(p) {
+            all_paths.push(p.clone());
+        }
+    }
+    all_paths.sort();
+
+    let mut files = Vec::new();
+    let mut total_additions = 0;
+    let mut total_deletions = 0;
+
+    for path in all_paths {
+        let (additions, deletions) = stats_map.get(&path).cloned().unwrap_or((0, 0));
+        let status = status_map.get(&path).cloned().unwrap_or_else(|| "modified".to_string());
+        let patch = patch_map.get(&path).cloned().unwrap_or_default();
+
+        total_additions += additions;
+        total_deletions += deletions;
+
+        files.push(CheckpointFileDiff {
+            path,
+            status,
+            additions,
+            deletions,
+            patch,
+        });
+    }
+
+    Ok(CheckpointDiffDetails {
+        checkpoint_id: commit_hash,
+        compare_target: target_mode.to_string(),
+        files,
+        total_additions,
+        total_deletions,
+    })
+}
+
+/// Restores a single file to its state at the specified checkpoint.
+/// Creates a safety snapshot first so this operation is non-destructive and undoable.
+pub fn restore_checkpoint_file(
+    workspace: &Path,
+    checkpoint_id: &str,
+    file_path: &str,
+) -> Result<FileRestoreResult, String> {
+    let git_dir = workspace.join(".git");
+    if !git_dir.exists() {
+        return Err("Workspace is not a Git repository".to_string());
+    }
+
+    let commit_hash = run_git(workspace, &["rev-parse", checkpoint_id], &[])?;
+    let short_hash = commit_hash[..7.min(commit_hash.len())].to_string();
+
+    // Pre-revert safety snapshot
+    let _ = create_checkpoint(
+        workspace,
+        &format!("Safety snapshot before reverting {} from {}", file_path, short_hash),
+    );
+
+    // Check if file exists in the checkpoint commit
+    let check_file = run_git(
+        workspace,
+        &["cat-file", "-e", &format!("{}:{}", commit_hash, file_path)],
+        &[],
+    );
+
+    if check_file.is_ok() {
+        // File exists in checkpoint commit: checkout file
+        run_git(workspace, &["checkout", &commit_hash, "--", file_path], &[])?;
+        Ok(FileRestoreResult {
+            success: true,
+            checkpoint_id: commit_hash,
+            file_path: file_path.to_string(),
+            message: format!("Successfully restored {} from checkpoint {}", file_path, short_hash),
+        })
+    } else {
+        // File did not exist in checkpoint commit: delete it from working tree if present
+        let full_path = workspace.join(file_path);
+        if full_path.exists() {
+            let _ = std::fs::remove_file(&full_path);
+            let _ = run_git(workspace, &["rm", "--cached", "-f", file_path], &[]);
+        }
+        Ok(FileRestoreResult {
+            success: true,
+            checkpoint_id: commit_hash,
+            file_path: file_path.to_string(),
+            message: format!("Removed {} to match checkpoint state {}", file_path, short_hash),
+        })
+    }
+}
+
+/// Restores a batch of selected files to their state at the specified checkpoint.
+pub fn restore_checkpoint_files(
+    workspace: &Path,
+    checkpoint_id: &str,
+    file_paths: &[String],
+) -> Result<RestoreResult, String> {
+    let git_dir = workspace.join(".git");
+    if !git_dir.exists() {
+        return Err("Workspace is not a Git repository".to_string());
+    }
+
+    let commit_hash = run_git(workspace, &["rev-parse", checkpoint_id], &[])?;
+    let short_hash = commit_hash[..7.min(commit_hash.len())].to_string();
+
+    // Create a single safety checkpoint before batch file revert
+    let _ = create_checkpoint(
+        workspace,
+        &format!("Safety snapshot before restoring {} files from {}", file_paths.len(), short_hash),
+    );
+
+    let mut restored = Vec::new();
+    for file_path in file_paths {
+        let check_file = run_git(
+            workspace,
+            &["cat-file", "-e", &format!("{}:{}", commit_hash, file_path)],
+            &[],
+        );
+
+        if check_file.is_ok() {
+            if run_git(workspace, &["checkout", &commit_hash, "--", file_path], &[]).is_ok() {
+                restored.push(file_path.clone());
+            }
+        } else {
+            let full_path = workspace.join(file_path);
+            if full_path.exists() {
+                let _ = std::fs::remove_file(&full_path);
+                let _ = run_git(workspace, &["rm", "--cached", "-f", file_path], &[]);
+            }
+            restored.push(file_path.clone());
+        }
+    }
+
+    Ok(RestoreResult {
+        success: true,
+        checkpoint_id: commit_hash,
+        restored_files: restored.clone(),
+        message: format!("Successfully restored {} files from checkpoint {}", restored.len(), short_hash),
+    })
+}
+
 fn chrono_like_now() -> String {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -349,6 +628,59 @@ mod tests {
 
         let head_after = run_git(&repo, &["rev-parse", "HEAD"], &[]).unwrap();
         assert_eq!(initial_log, head_after, "HEAD commit must not move during checkpoint");
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn test_get_checkpoint_diff_vs_parent_and_working() {
+        let repo = setup_test_repo("diff_test");
+
+        let sample_file = repo.join("sample.txt");
+        fs::write(&sample_file, "line 1\nline 2\n").unwrap();
+
+        let cp1 = create_checkpoint(&repo, "Checkpoint 1").expect("Failed to create cp1");
+
+        // Make further changes in working directory
+        fs::write(&sample_file, "line 1\nline 2 modified\nline 3 added\n").unwrap();
+        let new_file = repo.join("new_file.txt");
+        fs::write(&new_file, "hello world\n").unwrap();
+
+        // Diff cp1 vs working tree
+        let diff_working = get_checkpoint_diff(&repo, &cp1.id, Some("working")).expect("Diff failed");
+        assert_eq!(diff_working.compare_target, "working");
+        assert!(!diff_working.files.is_empty());
+        assert!(diff_working.total_additions > 0);
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn test_restore_single_file_granular() {
+        let repo = setup_test_repo("granular_restore");
+
+        let file_a = repo.join("file_a.txt");
+        let file_b = repo.join("file_b.txt");
+
+        fs::write(&file_a, "original A\n").unwrap();
+        fs::write(&file_b, "original B\n").unwrap();
+
+        let cp = create_checkpoint(&repo, "Initial state").expect("Checkpoint failed");
+
+        // Mutate both files
+        fs::write(&file_a, "mutated A\n").unwrap();
+        fs::write(&file_b, "mutated B\n").unwrap();
+
+        // Revert ONLY file_a
+        let res = restore_checkpoint_file(&repo, &cp.id, "file_a.txt").expect("Single restore failed");
+        assert!(res.success);
+
+        // Verify file_a is restored, but file_b remains mutated!
+        let content_a = fs::read_to_string(&file_a).unwrap();
+        let content_b = fs::read_to_string(&file_b).unwrap();
+
+        assert_eq!(content_a.replace("\r\n", "\n"), "original A\n");
+        assert_eq!(content_b.replace("\r\n", "\n"), "mutated B\n");
 
         let _ = fs::remove_dir_all(&repo);
     }

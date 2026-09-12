@@ -14,7 +14,8 @@ import {
   ChevronRight,
   Sparkles,
   X,
-  Clock
+  Clock,
+  GitCompare
 } from 'lucide-react';
 import { useCheckpointStore } from '../../stores/checkpointStore';
 import type { Checkpoint } from '../../types/git';
@@ -52,6 +53,7 @@ export const CheckpointTimeline: React.FC = () => {
     rollbackToCheckpoint,
     clearStatusMessage,
     getFilteredCheckpoints,
+    openInspector,
   } = useCheckpointStore();
 
   const [expandedCheckpoints, setExpandedCheckpoints] = useState<Set<string>>(new Set());
@@ -304,14 +306,16 @@ export const CheckpointTimeline: React.FC = () => {
                         {isExpanded && (
                           <div className="mt-1 pl-2 space-y-0.5 border-l border-ide-border/60">
                             {cp.filePaths.map((p, idx) => (
-                              <div
+                              <button
                                 key={idx}
-                                className="flex items-center gap-1.5 text-[10px] font-mono text-ide-textMuted hover:text-ide-textBright truncate"
-                                title={p}
+                                type="button"
+                                onClick={() => openInspector(cp.id, p)}
+                                className="w-full text-left flex items-center gap-1.5 text-[10px] font-mono text-ide-textMuted hover:text-blue-400 truncate cursor-pointer transition py-0.5 rounded hover:bg-ide-bg/60"
+                                title={`Inspect diff for ${p}`}
                               >
                                 <FileCode size={10} className="text-sky-400 flex-shrink-0" />
                                 <span className="truncate">{p}</span>
-                              </div>
+                              </button>
                             ))}
                           </div>
                         )}
@@ -321,9 +325,19 @@ export const CheckpointTimeline: React.FC = () => {
                     {/* Action Bar */}
                     <div className="pt-1 flex items-center justify-end gap-1.5">
                       <button
+                        type="button"
+                        onClick={() => openInspector(cp.id)}
+                        className="opacity-80 group-hover:opacity-100 px-2 py-0.5 rounded bg-ide-hover hover:bg-blue-600/20 hover:text-blue-300 hover:border-blue-500/40 text-[10px] font-medium transition flex items-center gap-1 border border-ide-border cursor-pointer"
+                        title="Inspect checkpoint diff and granularly revert files"
+                      >
+                        <GitCompare size={10} />
+                        <span>Inspect</span>
+                      </button>
+
+                      <button
                         onClick={() => rollbackToCheckpoint(cp.id)}
                         disabled={isRestoring}
-                        className="opacity-80 group-hover:opacity-100 px-2 py-0.5 rounded bg-ide-hover hover:bg-amber-600/20 hover:text-amber-300 hover:border-amber-500/40 text-[10px] font-medium transition flex items-center gap-1 border border-ide-border"
+                        className="opacity-80 group-hover:opacity-100 px-2 py-0.5 rounded bg-ide-hover hover:bg-amber-600/20 hover:text-amber-300 hover:border-amber-500/40 text-[10px] font-medium transition flex items-center gap-1 border border-ide-border cursor-pointer"
                         title="Revert workspace to this exact snapshot"
                       >
                         {isRestoring ? (
