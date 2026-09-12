@@ -8,9 +8,11 @@ import {
 } from './diff/virtualDocProvider';
 import { DiffHistoryManager } from './diff/diffHistory';
 import { applyMultiFilePatch, dryRunMultiFilePatch } from './diff/patchOrchestrator';
+import { ChatViewProvider } from './chat/chatViewProvider';
 
 let completionProvider: OpenStudioCompletionProvider | null = null;
 let statusBarItem: vscode.StatusBarItem | null = null;
+let chatViewProvider: ChatViewProvider | null = null;
 
 /**
  * Extension entrypoint: activated when VS Code finishes initialization.
@@ -182,6 +184,54 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
   context.subscriptions.push(rollbackLastDiffCommand);
 
+  // 9. Sidebar Webview Chat Panel
+  chatViewProvider = new ChatViewProvider(context.extensionUri);
+  const chatViewDisposable = vscode.window.registerWebviewViewProvider(
+    ChatViewProvider.viewType,
+    chatViewProvider,
+    {
+      webviewOptions: {
+        retainContextWhenHidden: true,
+      },
+    }
+  );
+  context.subscriptions.push(chatViewDisposable);
+
+  // 10. Open Chat Command
+  const openChatCommand = vscode.commands.registerCommand('openstudio.openChat', async () => {
+    await vscode.commands.executeCommand('openstudio.chatView.focus');
+  });
+  context.subscriptions.push(openChatCommand);
+
+  // 11. Quick-Action Context Commands
+  const explainCodeCommand = vscode.commands.registerCommand('openstudio.explainCode', async () => {
+    if (chatViewProvider) {
+      await chatViewProvider.executeQuickAction('explain');
+    }
+  });
+  context.subscriptions.push(explainCodeCommand);
+
+  const refactorCodeCommand = vscode.commands.registerCommand('openstudio.refactorCode', async () => {
+    if (chatViewProvider) {
+      await chatViewProvider.executeQuickAction('refactor');
+    }
+  });
+  context.subscriptions.push(refactorCodeCommand);
+
+  const generateTestsCommand = vscode.commands.registerCommand('openstudio.generateTests', async () => {
+    if (chatViewProvider) {
+      await chatViewProvider.executeQuickAction('generateTests');
+    }
+  });
+  context.subscriptions.push(generateTestsCommand);
+
+  const fixCodeCommand = vscode.commands.registerCommand('openstudio.fixCode', async () => {
+    if (chatViewProvider) {
+      await chatViewProvider.executeQuickAction('fix');
+    }
+  });
+  context.subscriptions.push(fixCodeCommand);
+
   // Initial silent background health check
   void vscode.commands.executeCommand('openstudio.checkHealth');
 }
@@ -197,6 +247,10 @@ export function deactivate(): void {
   if (statusBarItem) {
     statusBarItem.dispose();
     statusBarItem = null;
+  }
+  if (chatViewProvider) {
+    chatViewProvider.abortGeneration();
+    chatViewProvider = null;
   }
   OpenStudioDiffContentProvider.getInstance().dispose();
 }

@@ -202,12 +202,71 @@ declare module 'vscode' {
     export function executeCommand<T = unknown>(command: string, ...rest: any[]): Thenable<T>;
   }
 
+  export enum ViewColumn {
+    Active = -1,
+    Beside = -2,
+    One = 1,
+    Two = 2,
+    Three = 3,
+    Four = 4,
+    Five = 5,
+    Six = 6,
+    Seven = 7,
+    Eight = 8,
+    Nine = 9,
+  }
+
+  export interface WebviewOptions {
+    readonly enableScripts?: boolean;
+    readonly enableForms?: boolean;
+    readonly localResourceRoots?: readonly Uri[];
+    readonly portMapping?: readonly any[];
+  }
+
+  export interface Webview {
+    options: WebviewOptions;
+    html: string;
+    readonly onDidReceiveMessage: Event<any>;
+    postMessage(message: any): Thenable<boolean>;
+    asWebviewUri(localResource: Uri): Uri;
+    readonly cspSource: string;
+  }
+
+  export interface WebviewViewResolveContext<T = unknown> {
+    readonly state?: T;
+  }
+
+  export interface WebviewView {
+    readonly viewType: string;
+    readonly webview: Webview;
+    title?: string;
+    description?: string;
+    badge?: any;
+    readonly visible: boolean;
+    readonly onDidChangeVisibility: Event<void>;
+    readonly onDidDispose: Event<void>;
+    show?(preserveFocus?: boolean): void;
+  }
+
+  export interface WebviewViewProvider {
+    resolveWebviewView(
+      webviewView: WebviewView,
+      context: WebviewViewResolveContext,
+      token: CancellationToken
+    ): Thenable<void> | void;
+  }
+
   export namespace window {
     export const activeTextEditor: TextEditor | undefined;
     export function showInformationMessage(message: string, ...items: string[]): Thenable<string | undefined>;
     export function showWarningMessage(message: string, ...items: string[]): Thenable<string | undefined>;
     export function showErrorMessage(message: string, ...items: string[]): Thenable<string | undefined>;
     export function createStatusBarItem(alignment?: StatusBarAlignment, priority?: number): StatusBarItem;
+    export function registerWebviewViewProvider(
+      viewId: string,
+      provider: WebviewViewProvider,
+      options?: { readonly webviewOptions?: { readonly retainContextWhenHidden?: boolean } }
+    ): Disposable;
   }
 
   export namespace workspace {

@@ -42,8 +42,75 @@
         "command": "openstudio.rollbackLastDiff",
         "title": "Open Studio: Rollback Last Applied Diff",
         "category": "Open Studio"
+      },
+      {
+        "command": "openstudio.openChat",
+        "title": "Open Studio: Open AI Chat",
+        "category": "Open Studio"
+      },
+      {
+        "command": "openstudio.explainCode",
+        "title": "Open Studio: Explain Selected Code",
+        "category": "Open Studio"
+      },
+      {
+        "command": "openstudio.refactorCode",
+        "title": "Open Studio: Refactor Selected Code",
+        "category": "Open Studio"
+      },
+      {
+        "command": "openstudio.generateTests",
+        "title": "Open Studio: Generate Tests for Selection",
+        "category": "Open Studio"
+      },
+      {
+        "command": "openstudio.fixCode",
+        "title": "Open Studio: Fix Bugs in Selected Code",
+        "category": "Open Studio"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "openstudio-sidebar",
+          "title": "Open Studio",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "openstudio-sidebar": [
+        {
+          "type": "webview",
+          "id": "openstudio.chatView",
+          "name": "Open Studio AI Chat"
+        }
+      ]
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "openstudio.explainCode",
+          "when": "editorHasSelection",
+          "group": "OpenStudio@1"
+        },
+        {
+          "command": "openstudio.refactorCode",
+          "when": "editorHasSelection",
+          "group": "OpenStudio@2"
+        },
+        {
+          "command": "openstudio.generateTests",
+          "when": "editorHasSelection",
+          "group": "OpenStudio@3"
+        },
+        {
+          "command": "openstudio.fixCode",
+          "when": "editorHasSelection",
+          "group": "OpenStudio@4"
+        }
+      ]
+    },
     "configuration": {
       "title": "Open Studio Local AI",
       "properties": {
