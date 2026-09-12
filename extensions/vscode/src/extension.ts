@@ -1,7 +1,13 @@
 import * as vscode from 'vscode';
 import { OpenStudioCompletionProvider } from './completionProvider';
 import { checkOllamaHealth } from './ollamaClient';
-import { parseFrugalDiff, applyFrugalDiff } from './frugalDiff';
+import {
+  OpenStudioDiffContentProvider,
+  createVirtualDiffUri,
+  OPENSTUDIO_DIFF_SCHEME,
+} from './diff/virtualDocProvider';
+import { DiffHistoryManager } from './diff/diffHistory';
+import { applyMultiFilePatch, dryRunMultiFilePatch } from './diff/patchOrchestrator';
 
 let completionProvider: OpenStudioCompletionProvider | null = null;
 let statusBarItem: vscode.StatusBarItem | null = null;
@@ -19,7 +25,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
   context.subscriptions.push(providerDisposable);
 
-  // 2. Status Bar Item
+  // 2. Virtual Document Content Provider for Side-by-Side Diff Previews
+  const diffProvider = OpenStudioDiffContentProvider.getInstance();
+  const diffProviderDisposable = vscode.workspace.registerTextDocumentContentProvider(
+    OPENSTUDIO_DIFF_SCHEME,
+    diffProvider
+  );
+  context.subscriptions.push(diffProviderDisposable);
+
+  // 3. Status Bar Item
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   statusBarItem.command = 'openstudio.checkHealth';
   statusBarItem.text = '$(zap) Open Studio: Connecting...';
@@ -27,7 +41,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   statusBarItem.show();
   context.subscriptions.push(statusBarItem);
 
-  // 3. Health Check Command
+  // 4. Health Check Command
   const checkHealthCommand = vscode.commands.registerCommand(
     'openstudio.checkHealth',
     async () => {
@@ -62,7 +76,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
   context.subscriptions.push(checkHealthCommand);
 
-  // 4. Manual Autocomplete Trigger Command
+  // 5. Manual Autocomplete Trigger Command
   const triggerAutocompleteCommand = vscode.commands.registerCommand(
     'openstudio.triggerAutocomplete',
     async () => {
@@ -71,24 +85,63 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
   context.subscriptions.push(triggerAutocompleteCommand);
 
-  // 5. Apply Frugal Diff Command
-  const applyFrugalDiffCommand = vscode.commands.registerCommand(
-    'openstudio.applyFrugalDiff',
+  // Helper to read diff text from editor selection or clipboard
+  const getDiffInput = async (): Promise<string> => {
+    const editor = vscode.window.activeTextEditor;
+    if (editor && !editor.selection.isEmpty) {
+      const selected = editor.document.getText(editor.selection);
+      if (selected.trim()) return selected;
+    }
+    return (await vscode.env.clipboard.readText()) || '';
+  };
+
+  // 6. Preview Frugal Diff Command (Side-by-Side native VS Code Diff Inspector)
+  const previewFrugalDiffCommand = vscode.commands.registerCommand(
+    'openstudio.previewFrugalDiff',
     async () => {
-      const editor = vscode.window.activeTextEditor;
-      if (!editor) {
-        vscode.window.showErrorMessage('Open Studio: No active text editor');
+      const diffText = await getDiffInput();
+      if (!diffText.trim()) {
+        vscode.window.showWarningMessage(
+          'Open Studio: No diff found in active selection or clipboard to preview.'
+        );
         return;
       }
 
-      // Check active selection or clipboard for diff content
-      const selection = editor.selection;
-      let diffText = editor.document.getText(selection);
-
-      if (!diffText.trim()) {
-        diffText = await vscode.env.clipboard.readText();
+      const dryRun = await dryRunMultiFilePatch(diffText);
+      if (dryRun.totalHunks === 0) {
+        vscode.window.showWarningMessage(
+          'Open Studio: Could not parse any SEARCH/REPLACE diff blocks.'
+        );
+        return;
       }
 
+      if (dryRun.files.length === 0 || dryRun.files[0].preview.appliedCount === 0) {
+        vscode.window.showErrorMessage(
+          `Open Studio: Diff preview failed: ${dryRun.errors[0] || 'No matching block found in document'}`
+        );
+        return;
+      }
+
+      const targetFile = dryRun.files[0];
+      const virtualUri = createVirtualDiffUri(targetFile.filePath);
+
+      diffProvider.setVirtualContent(virtualUri, targetFile.preview.patchedContent);
+
+      await vscode.commands.executeCommand(
+        'vscode.diff',
+        targetFile.uri,
+        virtualUri,
+        `${targetFile.filePath} ↔ Open Studio (Proposed Diff)`
+      );
+    }
+  );
+  context.subscriptions.push(previewFrugalDiffCommand);
+
+  // 7. Apply Frugal Diff Command (Multi-File with Dry-Run & Rollback Tracking)
+  const applyFrugalDiffCommand = vscode.commands.registerCommand(
+    'openstudio.applyFrugalDiff',
+    async () => {
+      const diffText = await getDiffInput();
       if (!diffText.trim()) {
         vscode.window.showWarningMessage(
           'Open Studio: No frugal diff block found in selection or clipboard.'
@@ -96,43 +149,38 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         return;
       }
 
-      const parsedFiles = parseFrugalDiff(diffText);
-      if (parsedFiles.length === 0 || parsedFiles[0].hunks.length === 0) {
-        vscode.window.showWarningMessage(
-          'Open Studio: Could not parse any SEARCH/REPLACE diff hunks.'
-        );
-        return;
-      }
+      const result = await applyMultiFilePatch(diffText, 'Applied via Open Studio Command');
 
-      const originalText = editor.document.getText();
-      const preview = applyFrugalDiff(originalText, parsedFiles[0].hunks);
-
-      if (!preview.success && preview.appliedCount === 0) {
-        vscode.window.showErrorMessage(
-          `Open Studio: Failed to apply diff hunk: ${preview.results[0]?.error || 'No matching block found'}`
-        );
-        return;
-      }
-
-      const fullRange = new vscode.Range(
-        new vscode.Position(0, 0),
-        new vscode.Position(editor.document.lineCount, 0)
-      );
-
-      const success = await editor.edit((editBuilder) => {
-        editBuilder.replace(fullRange, preview.patchedContent);
-      });
-
-      if (success) {
+      if (result.success) {
         vscode.window.showInformationMessage(
-          `Open Studio: Applied ${preview.appliedCount}/${preview.totalCount} frugal diff hunk(s) successfully.`
+          `Open Studio: Applied ${result.appliedHunks}/${result.totalHunks} hunk(s) across ${result.filesModified.length} file(s) successfully.`
         );
       } else {
-        vscode.window.showErrorMessage('Open Studio: Failed to apply editor edit.');
+        vscode.window.showErrorMessage(
+          `Open Studio: Failed to apply diff: ${result.error || 'Unknown error'}`
+        );
       }
     }
   );
   context.subscriptions.push(applyFrugalDiffCommand);
+
+  // 8. Rollback Last Applied Diff Command
+  const rollbackLastDiffCommand = vscode.commands.registerCommand(
+    'openstudio.rollbackLastDiff',
+    async () => {
+      const result = await DiffHistoryManager.getInstance().rollbackLastSession();
+      if (result.success) {
+        vscode.window.showInformationMessage(
+          `Open Studio: Rolled back ${result.rolledBackFiles.length} file(s) to pre-patch state: ${result.rolledBackFiles.join(', ')}`
+        );
+      } else {
+        vscode.window.showWarningMessage(
+          `Open Studio: Rollback failed: ${result.error || 'No applied diff sessions to roll back'}`
+        );
+      }
+    }
+  );
+  context.subscriptions.push(rollbackLastDiffCommand);
 
   // Initial silent background health check
   void vscode.commands.executeCommand('openstudio.checkHealth');
@@ -150,4 +198,5 @@ export function deactivate(): void {
     statusBarItem.dispose();
     statusBarItem = null;
   }
+  OpenStudioDiffContentProvider.getInstance().dispose();
 }

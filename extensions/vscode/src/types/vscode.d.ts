@@ -43,8 +43,55 @@ declare module 'vscode' {
     readonly isEmptyOrWhitespace: boolean;
   }
 
+  export class Uri {
+    readonly scheme: string;
+    readonly authority: string;
+    readonly path: string;
+    readonly query: string;
+    readonly fragment: string;
+    readonly fsPath: string;
+    constructor(scheme: string, authority: string, path: string, query: string, fragment: string);
+    static file(path: string): Uri;
+    static parse(value: string, _strict?: boolean): Uri;
+    toString(skipEncoding?: boolean): string;
+  }
+
+  export type Event<T> = (listener: (e: T) => any, thisArgs?: any, disposables?: Disposable[]) => Disposable;
+
+  export class EventEmitter<T> {
+    readonly event: Event<T>;
+    fire(data: T): void;
+    dispose(): void;
+  }
+
+  export interface WorkspaceFolder {
+    readonly uri: Uri;
+    readonly name: string;
+    readonly index: number;
+  }
+
+  export class TextEdit {
+    range: Range;
+    newText: string;
+    constructor(range: Range, newText: string);
+    static replace(range: Range, newText: string): TextEdit;
+    static insert(position: Position, newText: string): TextEdit;
+    static delete(range: Range): TextEdit;
+  }
+
+  export class WorkspaceEdit {
+    replace(uri: Uri, range: Range, newText: string): void;
+    insert(uri: Uri, position: Position, newText: string): void;
+    delete(uri: Uri, range: Range): void;
+  }
+
+  export interface TextDocumentContentProvider {
+    onDidChange?: Event<Uri>;
+    provideTextDocumentContent(uri: Uri, token: CancellationToken): ProviderResult<string>;
+  }
+
   export interface TextDocument {
-    readonly uri: any;
+    readonly uri: Uri;
     readonly fileName: string;
     readonly isUntitled: boolean;
     readonly languageId: string;
@@ -164,8 +211,15 @@ declare module 'vscode' {
   }
 
   export namespace workspace {
+    export const workspaceFolders: readonly WorkspaceFolder[] | undefined;
     export function getConfiguration(section?: string): WorkspaceConfiguration;
     export function onDidChangeConfiguration(listener: (e: any) => any, thisArgs?: any, disposables?: Disposable[]): Disposable;
+    export function applyEdit(edit: WorkspaceEdit): Thenable<boolean>;
+    export function registerTextDocumentContentProvider(
+      scheme: string,
+      provider: TextDocumentContentProvider
+    ): Disposable;
+    export function openTextDocument(uriOrFileName: Uri | string): Thenable<TextDocument>;
   }
 
   export namespace env {

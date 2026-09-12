@@ -32,6 +32,16 @@
         "command": "openstudio.applyFrugalDiff",
         "title": "Open Studio: Apply Frugal Diff Patch",
         "category": "Open Studio"
+      },
+      {
+        "command": "openstudio.previewFrugalDiff",
+        "title": "Open Studio: Preview Frugal Diff (Side-by-Side)",
+        "category": "Open Studio"
+      },
+      {
+        "command": "openstudio.rollbackLastDiff",
+        "title": "Open Studio: Rollback Last Applied Diff",
+        "category": "Open Studio"
       }
     ],
     "configuration": {
