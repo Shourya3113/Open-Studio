@@ -6,7 +6,10 @@ export type CommandCategory =
   | 'Terminal'
   | 'Settings'
   | 'Preferences'
-  | 'Help';
+  | 'Help'
+  | 'Plugins'
+  | (string & {});
+
 
 export interface PaletteCommand {
   id: string;

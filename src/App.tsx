@@ -50,6 +50,7 @@ import {
 } from './stores/persistence';
 import { DetectedServer } from './types/lsp';
 import { detectServerForFile } from './features/lsp/serverDetector';
+import { usePluginStore } from './stores/pluginStore';
 
 const SAMPLE_WELCOME_TS = `// Open Studio: Local AI IDE & Agentic Workspace
 // Day 2: Monaco Editor Core & Offline Bundling Verified
@@ -132,6 +133,7 @@ export default function App() {
   const { openFile, buffers, activeBufferId } = useEditorStore();
   const activeBuffer = activeBufferId ? buffers[activeBufferId] : null;
   const [activeLspServer, setActiveLspServer] = useState<DetectedServer | null>(null);
+  const statusBarItems = usePluginStore((s) => s.statusBarItems);
 
   // Auto-detect LSP Server for active file
   useEffect(() => {
@@ -242,6 +244,11 @@ export default function App() {
     );
     return unregister;
   }, [sidebarWidth, bottomPanelHeight, isSidebarOpen, isBottomPanelOpen, activeTab]);
+
+  // Initialize native plugin architecture and built-in plugins
+  useEffect(() => {
+    void usePluginStore.getState().initializeBuiltinPlugins();
+  }, []);
 
   // Global IDE shortcuts: Ctrl+Shift+P / F1 (Commands), Ctrl+P (Quick Open), Ctrl+Shift+O (Go to Symbol), Ctrl+Shift+M (Problems), Ctrl+` (Terminal), Ctrl+B (Sidebar)
   useEffect(() => {
@@ -667,6 +674,25 @@ export default function App() {
           {activeBuffer && activeBuffer.isDirty && (
             <span className="text-amber-400">● Unsaved Changes (Ctrl+S to save)</span>
           )}
+          {/* Dynamic Plugin Status Bar Items (Left) */}
+          {Object.values(statusBarItems)
+            .filter((item) => item.alignment === 'left')
+            .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))
+            .map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={item.onClick}
+                title={item.tooltip}
+                className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded transition ${
+                  item.onClick
+                    ? 'cursor-pointer hover:bg-ide-hover hover:text-ide-textBright'
+                    : 'cursor-default'
+                }`}
+              >
+                <span>{item.text}</span>
+              </button>
+            ))}
         </div>
         <div className="flex items-center gap-4">
           <button 
@@ -762,6 +788,25 @@ export default function App() {
               </span>
             </button>
           )}
+          {/* Dynamic Plugin Status Bar Items (Right) */}
+          {Object.values(statusBarItems)
+            .filter((item) => item.alignment === 'right')
+            .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))
+            .map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={item.onClick}
+                title={item.tooltip}
+                className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded transition font-mono text-[10px] text-ide-textMuted ${
+                  item.onClick
+                    ? 'cursor-pointer hover:bg-ide-hover hover:text-ide-textBright'
+                    : 'cursor-default'
+                }`}
+              >
+                <span>{item.text}</span>
+              </button>
+            ))}
           {activeBuffer?.cursorPosition && (
             <span>
               Ln {activeBuffer.cursorPosition.line}, Col {activeBuffer.cursorPosition.column}
