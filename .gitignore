@@ -22,6 +22,8 @@ Cargo.lock
 node_modules/
 dist/
 build/
+out/
+.vscode-test/
 .next/
 .cache/
 npm-debug.log*

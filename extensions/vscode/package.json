@@ -1,0 +1,83 @@
+{
+  "name": "open-studio-vscode",
+  "displayName": "Open Studio Local AI",
+  "description": "100% Offline, Native Local AI Autocompletion & Frugal Diffs powered by Ollama",
+  "version": "0.1.0",
+  "publisher": "open-studio",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Machine Learning",
+    "Snippets"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "openstudio.checkHealth",
+        "title": "Open Studio: Check Local AI Health",
+        "category": "Open Studio"
+      },
+      {
+        "command": "openstudio.triggerAutocomplete",
+        "title": "Open Studio: Trigger Local AI Autocomplete",
+        "category": "Open Studio"
+      },
+      {
+        "command": "openstudio.applyFrugalDiff",
+        "title": "Open Studio: Apply Frugal Diff Patch",
+        "category": "Open Studio"
+      }
+    ],
+    "configuration": {
+      "title": "Open Studio Local AI",
+      "properties": {
+        "openstudio.ollamaEndpoint": {
+          "type": "string",
+          "default": "http://127.0.0.1:11434",
+          "description": "Base URL of the local Ollama daemon."
+        },
+        "openstudio.autocompleteModel": {
+          "type": "string",
+          "default": "qwen2.5-coder:1.5b",
+          "description": "Local model identifier for inline FIM code autocompletion."
+        },
+        "openstudio.chatModel": {
+          "type": "string",
+          "default": "qwen2.5-coder:7b",
+          "description": "Local model identifier for chat and diff generation."
+        },
+        "openstudio.debounceMs": {
+          "type": "number",
+          "default": 30,
+          "description": "Typing debounce delay in milliseconds before dispatching inference."
+        },
+        "openstudio.maxPrefixChars": {
+          "type": "number",
+          "default": 1000,
+          "description": "Maximum characters before cursor included in FIM prompt."
+        },
+        "openstudio.maxSuffixChars": {
+          "type": "number",
+          "default": 500,
+          "description": "Maximum characters after cursor included in FIM prompt."
+        },
+        "openstudio.temperature": {
+          "type": "number",
+          "default": 0.1,
+          "description": "Sampling temperature for inline code completion (0.0 to 1.0)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "vitest run"
+  }
+}

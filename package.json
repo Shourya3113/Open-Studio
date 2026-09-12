@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "test": "vitest run",
+    "extensions:compile": "tsc -p extensions/vscode",
+    "extensions:test": "vitest run extensions/vscode",
     "preview": "vite preview",
     "tauri": "tauri"
   },
