@@ -86,4 +86,28 @@ describe('ContextPillBar Component Logic', () => {
     expect(store.activeBufferId).toBe(initialId);
     expect(store.buffers[initialId].cursorPosition).toEqual({ line: 19, column: 1 });
   });
+
+  it('supports MCP tools schema pill item and count metadata', () => {
+    const summaryWithMcp: InjectedContextSummary = {
+      query: 'Check filesystem with @tool',
+      totalTokens: 520,
+      budgetTokens: 4000,
+      items: [
+        {
+          type: 'mcp_tool',
+          filePath: '3 Local Tools',
+          tokenCount: 120,
+        },
+        ...sampleSummary.items,
+      ],
+      referencedFiles: sampleSummary.referencedFiles,
+      rawContextText: '=== AVAILABLE LOCAL MCP TOOLS ===',
+      mcpToolsCount: 3,
+    };
+
+    expect(summaryWithMcp.mcpToolsCount).toBe(3);
+    const mcpItem = summaryWithMcp.items.find((i) => i.type === 'mcp_tool');
+    expect(mcpItem).toBeDefined();
+    expect(mcpItem?.filePath).toBe('3 Local Tools');
+  });
 });

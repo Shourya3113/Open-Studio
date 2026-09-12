@@ -149,7 +149,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             ),
           }));
         },
-        (stats) => {
+        async (stats) => {
           let tokPerSec: string | undefined;
           let statsLabel = 'Completed';
 
@@ -157,6 +157,152 @@ export const useChatStore = create<ChatState>((set, get) => ({
             const speed = (stats.eval_count / (stats.eval_duration / 1e9)).toFixed(1);
             tokPerSec = `${speed} tok/s`;
             statsLabel = `${stats.eval_count} tokens • ${tokPerSec}`;
+          }
+
+          // Check if response contains an MCP tool call
+          const latestMessages = get().messages;
+          const currentAsst = latestMessages.find((m) => m.id === asstId);
+          const asstContent = currentAsst?.content || '';
+
+          let toolCall = null;
+          let availableTools: import('../types/mcp').McpToolDefinition[] = [];
+          try {
+            const { useMcpStore } = await import('./mcpStore');
+            availableTools = useMcpStore.getState().tools;
+            const { extractToolCall } = await import('../features/mcp/toolCaller');
+            toolCall = extractToolCall(asstContent, availableTools);
+          } catch {
+            toolCall = null;
+          }
+
+          if (toolCall) {
+            // Update message with parsed toolCall
+            set((state) => ({
+              messages: state.messages.map((m) =>
+                m.id === asstId
+                  ? {
+                      ...m,
+                      isStreaming: false,
+                      tokensCount: stats.eval_count,
+                      tokPerSec,
+                      model,
+                      routeRationale,
+                      toolCall: toolCall || undefined,
+                    }
+                  : m
+              ),
+              genStats: `Executing tool ${toolCall.tool}...`,
+            }));
+
+            // Execute the tool call
+            const { executeToolCallWithFallback } = await import('../features/mcp/toolCaller');
+            const toolResult = await executeToolCallWithFallback(toolCall, availableTools);
+
+            // Update message with toolResult
+            set((state) => ({
+              messages: state.messages.map((m) =>
+                m.id === asstId
+                  ? {
+                      ...m,
+                      toolResult,
+                    }
+                  : m
+              ),
+            }));
+
+            // Format observation and trigger follow-up continuation turn
+            const { formatToolCallResultForPrompt } = await import('../features/mcp/schemaTranslator');
+            const observationText = formatToolCallResultForPrompt(toolCall.tool, toolResult);
+
+            const followUpUserMsg: ChatMessage = {
+              id: `obs-${Date.now()}`,
+              role: 'user',
+              content: observationText,
+              timestamp: Date.now(),
+            };
+
+            const finalAsstId = `asst-final-${Date.now()}`;
+            const finalAsstMsg: ChatMessage = {
+              id: finalAsstId,
+              role: 'assistant',
+              content: '',
+              timestamp: Date.now(),
+              isStreaming: true,
+              model,
+            };
+
+            const updatedHistory = [...get().messages, followUpUserMsg, finalAsstMsg];
+            set({
+              messages: updatedHistory,
+              isGenerating: true,
+              genStats: 'Synthesizing response with tool data...',
+            });
+
+            const continuationPrompt = buildChatMLPrompt(
+              updatedHistory.slice(0, -1),
+              augmentedSystemPrompt
+            );
+
+            try {
+              const contCancel = await streamCompletion(
+                {
+                  model,
+                  prompt: continuationPrompt,
+                  temperature: 0.1,
+                  stop_tokens: CHATML_STOP_TOKENS,
+                  priority,
+                  keep_alive: keepAlive,
+                },
+                (token) => {
+                  set((state) => ({
+                    messages: state.messages.map((m) =>
+                      m.id === finalAsstId ? { ...m, content: m.content + token } : m
+                    ),
+                  }));
+                },
+                (contStats) => {
+                  let contSpeed: string | undefined;
+                  if (contStats.eval_count && contStats.eval_duration) {
+                    const sp = (contStats.eval_count / (contStats.eval_duration / 1e9)).toFixed(1);
+                    contSpeed = `${sp} tok/s`;
+                  }
+                  set((state) => ({
+                    messages: state.messages.map((m) =>
+                      m.id === finalAsstId
+                        ? {
+                            ...m,
+                            isStreaming: false,
+                            tokensCount: contStats.eval_count,
+                            tokPerSec: contSpeed,
+                          }
+                        : m
+                    ),
+                    isGenerating: false,
+                    abortFn: null,
+                    genStats: contStats.eval_count
+                      ? `${contStats.eval_count} tokens • ${contSpeed}`
+                      : 'Completed',
+                  }));
+                }
+              );
+              set({ abortFn: contCancel });
+              return;
+            } catch (contErr) {
+              set((state) => ({
+                messages: state.messages.map((m) =>
+                  m.id === finalAsstId
+                    ? {
+                        ...m,
+                        isStreaming: false,
+                        error: `Continuation inference failed: ${String(contErr)}`,
+                      }
+                    : m
+                ),
+                isGenerating: false,
+                abortFn: null,
+              }));
+              return;
+            }
           }
 
           set((state) => ({

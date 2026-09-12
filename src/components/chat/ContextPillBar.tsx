@@ -6,7 +6,8 @@ import {
   Copy, 
   Check, 
   Layers, 
-  ExternalLink 
+  ExternalLink,
+  Wrench
 } from 'lucide-react';
 import { InjectedContextSummary, InjectedContextItem } from '../../types/context';
 import { openFileAtLocation } from '../../features/rag/contextAggregator';
@@ -36,7 +37,7 @@ export const ContextPillBar: React.FC<ContextPillBarProps> = ({ summary }) => {
 
   const handlePillClick = (item: InjectedContextItem, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (item.filePath && item.filePath !== 'Repository AST Skeleton') {
+    if (item.type !== 'mcp_tool' && item.filePath && item.filePath !== 'Repository AST Skeleton') {
       openFileAtLocation(item.filePath, item.lineNumber);
     }
   };
@@ -58,6 +59,12 @@ export const ContextPillBar: React.FC<ContextPillBarProps> = ({ summary }) => {
           <span className="text-[10px] text-ide-textMuted/80 font-mono">
             ({summary.items.length} {summary.items.length === 1 ? 'item' : 'items'} • ~{summary.totalTokens} tokens)
           </span>
+          {summary.mcpToolsCount !== undefined && summary.mcpToolsCount > 0 && (
+            <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[9.5px] font-mono flex items-center gap-1">
+              <Wrench size={10} />
+              <span>{summary.mcpToolsCount} {summary.mcpToolsCount === 1 ? 'tool' : 'tools'}</span>
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1">
@@ -86,6 +93,23 @@ export const ContextPillBar: React.FC<ContextPillBarProps> = ({ summary }) => {
         {summary.items.map((item, idx) => {
           const fileName = item.filePath.split(/[/\\]/).pop() || item.filePath;
           const isSkeleton = item.type === 'ast_skeleton';
+          const isMcpTool = item.type === 'mcp_tool';
+
+          if (isMcpTool) {
+            return (
+              <div
+                key={`mcp-${idx}`}
+                className="group flex items-center gap-1.5 px-2 py-0.5 rounded border border-amber-500/40 bg-amber-500/10 text-[11px] text-amber-300 transition select-none shadow-xs"
+                title="Active Local MCP Tools schema injected into context"
+              >
+                <Wrench size={11} className="text-amber-400 flex-shrink-0" />
+                <span className="font-mono">{item.filePath}</span>
+                <span className="px-1 py-0.2 text-[9px] rounded bg-amber-500/25 text-amber-400 border border-amber-500/40">
+                  schema
+                </span>
+              </div>
+            );
+          }
 
           return (
             <button

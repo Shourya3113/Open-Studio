@@ -12,6 +12,8 @@ export interface ChatMessage {
   contextSummary?: InjectedContextSummary;
   model?: string;
   routeRationale?: string;
+  toolCall?: import('../mcp/toolCaller').ParsedToolCall;
+  toolResult?: import('../../types/mcp').McpToolCallResult;
 }
 
 export const CHATML_STOP_TOKENS = [
@@ -64,22 +66,73 @@ export async function augmentPromptWithContext(
   userQuery: string,
   baseSystemPrompt: string = DEFAULT_SYSTEM_PROMPT,
   activeFile?: string | null,
-  openFiles?: string[]
+  openFiles?: string[],
+  mcpTools?: import('../../types/mcp').McpToolDefinition[]
 ): Promise<{
   systemPrompt: string;
   hasRepoContext: boolean;
   contextSummary?: InjectedContextSummary;
+  hasMcpTools?: boolean;
 }> {
   const hasRepoTag = /@repo\b|@skeleton\b/i.test(userQuery);
   const hasCodebaseTag = /@codebase\b/i.test(userQuery);
   const hasSearchTag = /@search\b/i.test(userQuery);
+  const hasMcpTag = /@(mcp|tool|tools)\b/i.test(userQuery);
 
-  if (!hasRepoTag && !hasCodebaseTag && !hasSearchTag) {
-    return { systemPrompt: baseSystemPrompt, hasRepoContext: false };
+  const toolsToInject = mcpTools || [];
+
+  if (!hasRepoTag && !hasCodebaseTag && !hasSearchTag && !hasMcpTag && toolsToInject.length === 0) {
+    return { systemPrompt: baseSystemPrompt, hasRepoContext: false, hasMcpTools: false };
   }
 
   let augmented = baseSystemPrompt;
   let contextSummary: InjectedContextSummary | undefined;
+
+  // Inject MCP Tools schema if @mcp tag is used or tools provided
+  let hasMcpTools = false;
+  let toolContext = '';
+  let tools: import('../../types/mcp').McpToolDefinition[] = [];
+  if (hasMcpTag || toolsToInject.length > 0) {
+    tools = toolsToInject;
+    if (tools.length === 0) {
+      try {
+        const { useMcpStore } = await import('../../stores/mcpStore');
+        tools = useMcpStore.getState().tools;
+      } catch {
+        tools = [];
+      }
+    }
+
+    if (tools.length > 0) {
+      const { formatMcpToolsForPrompt } = await import('../mcp/schemaTranslator');
+      toolContext = formatMcpToolsForPrompt(tools);
+      if (toolContext) {
+        augmented = `${augmented}\n\n${toolContext}`;
+        hasMcpTools = true;
+      }
+    }
+  }
+
+  if (!hasRepoTag && !hasCodebaseTag && !hasSearchTag) {
+    if (hasMcpTools && tools.length > 0) {
+      contextSummary = {
+        query: userQuery,
+        totalTokens: Math.round(toolContext.length / 4),
+        budgetTokens: 4096,
+        items: [
+          {
+            type: 'mcp_tool',
+            filePath: `${tools.length} Local ${tools.length === 1 ? 'Tool' : 'Tools'}`,
+            tokenCount: Math.round(toolContext.length / 4),
+          },
+        ],
+        referencedFiles: [],
+        rawContextText: toolContext,
+        mcpToolsCount: tools.length,
+      };
+    }
+    return { systemPrompt: augmented, hasRepoContext: false, hasMcpTools, contextSummary };
+  }
 
   const { aggregateContext, resultToSummary } = await import('../rag/contextAggregator');
   const { getClampedContextBudget } = await import('../hardware/memorySentinel');
@@ -166,7 +219,18 @@ export async function augmentPromptWithContext(
     augmented = `${augmented}\n\n${skeleton.composite_prompt}`;
   }
 
-  return { systemPrompt: augmented, hasRepoContext: true, contextSummary };
+  if (hasMcpTools && tools.length > 0 && contextSummary) {
+    contextSummary.mcpToolsCount = tools.length;
+    contextSummary.items.push({
+      type: 'mcp_tool',
+      filePath: `${tools.length} Local ${tools.length === 1 ? 'Tool' : 'Tools'}`,
+      tokenCount: Math.round(toolContext.length / 4),
+    });
+    contextSummary.totalTokens += Math.round(toolContext.length / 4);
+    contextSummary.rawContextText = `${contextSummary.rawContextText}\n\n${toolContext}`;
+  }
+
+  return { systemPrompt: augmented, hasRepoContext: true, contextSummary, hasMcpTools };
 }
 
 /**

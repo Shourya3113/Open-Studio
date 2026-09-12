@@ -29,7 +29,7 @@ export interface AggregatedContextResult {
 }
 
 export interface InjectedContextItem {
-  type: 'snippet' | 'ast_skeleton' | 'file';
+  type: 'snippet' | 'ast_skeleton' | 'file' | 'mcp_tool';
   filePath: string;
   lineNumber?: number;
   score?: number;
@@ -46,4 +46,5 @@ export interface InjectedContextSummary {
   items: InjectedContextItem[];
   referencedFiles: string[];
   rawContextText: string;
+  mcpToolsCount?: number;
 }

@@ -10,7 +10,8 @@ import {
   Sparkles, 
   User,
   Zap,
-  AlertCircle
+  AlertCircle,
+  Wrench
 } from 'lucide-react';
 import { useChatStore } from '../../stores/chatStore';
 import { MarkdownMessage } from './MarkdownMessage';
@@ -281,7 +282,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ inferenceHealth }) => {
           </div>
         ) : (
           messages.map((msg, index) => {
-            const isUser = msg.role === 'user';
+            const isObservation = msg.role === 'user' && msg.content.startsWith('=== TOOL OBSERVATION');
+            const isUser = msg.role === 'user' && !isObservation;
             const isLast = index === messages.length - 1;
 
             return (
@@ -293,7 +295,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ inferenceHealth }) => {
               >
                 {/* Author badge */}
                 <div className="flex items-center gap-1.5 text-[10px] text-ide-textMuted px-1">
-                  {isUser ? (
+                  {isObservation ? (
+                    <>
+                      <Wrench size={11} className="text-amber-400" />
+                      <span className="text-amber-300 font-medium">MCP Tool Observation</span>
+                    </>
+                  ) : isUser ? (
                     <>
                       <span>You</span>
                       <User size={11} className="text-sky-400" />
@@ -322,19 +329,19 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ inferenceHealth }) => {
                 {/* Message Bubble */}
                 <div
                   className={`rounded-lg px-3.5 py-2.5 max-w-[95%] text-xs shadow-sm ${
-                    isUser
+                    isObservation
+                      ? 'bg-amber-950/20 border border-amber-800/40 text-ide-textBright w-full'
+                      : isUser
                       ? 'bg-ide-accent/20 border border-ide-accent/40 text-ide-textBright'
                       : 'bg-ide-bg border border-ide-border text-ide-textBright w-full'
                   }`}
                 >
-                  {isUser ? (
-                    <MarkdownMessage content={msg.content} />
-                  ) : (
-                    <MarkdownMessage
-                      content={msg.content}
-                      isStreaming={msg.isStreaming}
-                    />
-                  )}
+                  <MarkdownMessage
+                    content={msg.content}
+                    isStreaming={msg.isStreaming}
+                    toolCall={msg.toolCall}
+                    toolResult={msg.toolResult}
+                  />
 
                   {/* Multi-File Injected Context Pills */}
                   {msg.contextSummary && (
