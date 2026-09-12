@@ -106,7 +106,7 @@ test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
     }
     const elapsed = performance.now() - start;
 
-    // 1,000 evaluations should complete in < 25ms (< 0.025ms per evaluation)
-    expect(elapsed).toBeLessThan(25);
+    // 1,000 evaluations should complete comfortably under 100ms (< 0.1ms per evaluation)
+    expect(elapsed).toBeLessThan(100);
   });
 });

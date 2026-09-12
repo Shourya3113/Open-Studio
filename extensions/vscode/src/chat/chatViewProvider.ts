@@ -6,7 +6,6 @@ import {
   createVirtualDiffUri,
 } from '../diff/virtualDocProvider';
 import {
-  EditorContext,
   QuickActionType,
   buildChatMLPrompt,
   buildQuickActionPrompt,
@@ -48,7 +47,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.html = this.getHtmlForWebview(webviewView.webview);
 
-    webviewView.webview.onDidReceiveMessage(async (data) => {
+    webviewView.webview.onDidReceiveMessage(async (data: any) => {
       switch (data.command) {
         case 'sendMessage':
           await this.handleUserMessage(data.prompt);
