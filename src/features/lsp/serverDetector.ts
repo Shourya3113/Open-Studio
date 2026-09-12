@@ -48,7 +48,7 @@ export const MOCK_KNOWN_SERVERS: Record<string, DetectedServer> = {
     binary_name: 'clangd',
     binary_path: null,
     is_installed: false,
-    install_hint: 'Install LLVM / clangd from https://clangd.llvm.org/ to enable C/C++ language features',
+    install_hint: 'Install LLVM / clangd from https://clangd.llvm.org/ to enable C/C++ language features', // airgap-allow: install-documentation
   },
 };
 

@@ -80,7 +80,7 @@ pub fn get_known_language_specs() -> Vec<LanguageServerSpec> {
             ],
             binary_names: vec!["clangd".to_string()],
             default_args: vec![],
-            install_hint: "Install LLVM / clangd from https://clangd.llvm.org/ to enable C/C++ language features".to_string(),
+            install_hint: "Install LLVM / clangd from https://clangd.llvm.org/ to enable C/C++ language features".to_string(), // airgap-allow: clangd-install-documentation
         },
         LanguageServerSpec {
             language: "html_css_json".to_string(),

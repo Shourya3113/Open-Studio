@@ -11,7 +11,9 @@ import {
   Zap,
   History,
   AlertCircle,
-  Database
+  Database,
+  ShieldCheck,
+  ShieldAlert
 } from 'lucide-react';
 import { AppSystemInfo } from './types/system';
 import { InferenceHealth } from './types/inference';
@@ -51,6 +53,7 @@ import {
 import { DetectedServer } from './types/lsp';
 import { detectServerForFile } from './features/lsp/serverDetector';
 import { usePluginStore } from './stores/pluginStore';
+import { useAirgapStore } from './stores/airgapStore';
 
 const SAMPLE_WELCOME_TS = `// Open Studio: Local AI IDE & Agentic Workspace
 // Day 2: Monaco Editor Core & Offline Bundling Verified
@@ -134,6 +137,8 @@ export default function App() {
   const activeBuffer = activeBufferId ? buffers[activeBufferId] : null;
   const [activeLspServer, setActiveLspServer] = useState<DetectedServer | null>(null);
   const statusBarItems = usePluginStore((s) => s.statusBarItems);
+  const airgapStatus = useAirgapStore((s) => s.status);
+  const airgapViolations = useAirgapStore((s) => s.violations);
 
   // Auto-detect LSP Server for active file
   useEffect(() => {
@@ -455,10 +460,30 @@ export default function App() {
         </button>
 
         <div className="flex items-center gap-3 text-ide-textMuted">
-          <span className="flex items-center gap-1">
-            <Zap size={13} className="text-amber-400" />
-            <span>Air-Gapped Core</span>
-          </span>
+          <button
+            type="button"
+            onClick={() => useAirgapStore.getState().runSelfCheck()}
+            title={
+              airgapStatus === 'verified'
+                ? 'Air-Gapped Core: Zero External Telemetry Verified (Click to re-verify)'
+                : airgapStatus === 'checking'
+                ? 'Air-Gapped Core: Running Security Audit...'
+                : `Air-Gapped Core: Warning! Violations detected: ${airgapViolations.join(', ')}`
+            }
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded transition cursor-pointer hover:bg-ide-hover"
+            data-testid="airgap-sentinel-badge"
+          >
+            {airgapStatus === 'verified' ? (
+              <ShieldCheck size={13} className="text-emerald-400" />
+            ) : airgapStatus === 'checking' ? (
+              <Zap size={13} className="text-amber-400 animate-pulse" />
+            ) : (
+              <ShieldAlert size={13} className="text-red-400" />
+            )}
+            <span className={airgapStatus === 'violation' ? 'text-red-300 font-semibold' : ''}>
+              Air-Gapped Core
+            </span>
+          </button>
           {systemInfo && (
             <span className="bg-ide-hover px-2 py-0.5 rounded text-[11px] text-ide-textBright">
               {systemInfo.arch} • {(systemInfo.memory_total_mb / 1024).toFixed(1)} GB RAM

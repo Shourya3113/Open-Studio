@@ -10,6 +10,7 @@ pub mod lsp;
 pub mod hardware;
 pub mod router;
 pub mod mcp;
+pub mod security;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -96,7 +97,8 @@ pub fn run() {
             mcp::list_mcp_servers,
             mcp::list_mcp_tools,
             mcp::call_mcp_tool,
-            mcp::get_mcp_server_status
+            mcp::get_mcp_server_status,
+            security::network_guard::validate_network_target_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running Open Studio");

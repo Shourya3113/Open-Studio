@@ -53,7 +53,7 @@ describe('SettingsStore & Persistence', () => {
   it('resets settings back to defaults', () => {
     useSettingsStore.getState().updateSettings({
       fontSize: 20,
-      ollamaEndpoint: 'http://custom:11434',
+      ollamaEndpoint: 'http://127.0.0.1:11435',
     });
 
     useSettingsStore.getState().resetToDefaults();

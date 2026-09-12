@@ -10,6 +10,7 @@
     "extensions:compile": "tsc -p extensions/vscode",
     "extensions:test": "vitest run extensions/vscode",
     "preview": "vite preview",
+    "verify:airgap": "node scripts/verify-airgap.mjs",
     "tauri": "tauri"
   },
   "dependencies": {
