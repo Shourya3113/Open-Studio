@@ -9,6 +9,7 @@ pub mod rag;
 pub mod lsp;
 pub mod hardware;
 pub mod router;
+pub mod mcp;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -21,6 +22,7 @@ pub fn run() {
         .manage(lsp::create_lsp_state())
         .manage(hardware::create_sentinel_state())
         .manage(router::create_router_state())
+        .manage(mcp::create_mcp_state())
         .invoke_handler(tauri::generate_handler![
             commands::system::get_system_info,
             fs::read_workspace_tree,
@@ -88,7 +90,13 @@ pub fn run() {
             router::route_task_cmd,
             router::classify_prompt_task_cmd,
             router::get_model_router_config_cmd,
-            router::set_model_router_config_cmd
+            router::set_model_router_config_cmd,
+            mcp::start_mcp_server,
+            mcp::stop_mcp_server,
+            mcp::list_mcp_servers,
+            mcp::list_mcp_tools,
+            mcp::call_mcp_tool,
+            mcp::get_mcp_server_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running Open Studio");
