@@ -25,6 +25,7 @@ pub fn run() {
         .manage(router::create_router_state())
         .manage(mcp::create_mcp_state())
         .manage(security::create_audit_logger_state())
+        .manage(security::create_policy_engine_state())
         .invoke_handler(tauri::generate_handler![
             commands::system::get_system_info,
             fs::read_workspace_tree,
@@ -103,7 +104,12 @@ pub fn run() {
             security::audit_logger::log_audit_event_cmd,
             security::audit_logger::query_audit_log_cmd,
             security::audit_logger::verify_audit_log_integrity_cmd,
-            security::audit_logger::export_audit_log_sql_cmd
+            security::audit_logger::export_audit_log_sql_cmd,
+            security::policy_engine::load_policy_rules_cmd,
+            security::policy_engine::save_policy_rules_cmd,
+            security::policy_engine::evaluate_file_access_cmd,
+            security::policy_engine::evaluate_prompt_policy_cmd,
+            security::policy_engine::evaluate_tool_execution_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running Open Studio");

@@ -15,6 +15,7 @@ import { useEditorStore } from './editorStore';
 import { useSettingsStore } from './settingsStore';
 import { streamCompletion } from '../services/inference';
 import { routeTask } from '../features/router/taskRouter';
+import { evaluatePromptPolicy, evaluateFileAccess } from '../features/security/policyEngine';
 
 export interface ChatState {
   messages: ChatMessage[];
@@ -94,13 +95,33 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }
 
-    // Resolve @file mentions for grounding context
+    // Policy & Governance Engine check (.openstudio/rules.yaml)
+    const policyDecision = await evaluatePromptPolicy(trimmed, model);
+    if (!policyDecision.allowed) {
+      const errorMsg = `🛡️ **Workspace Policy Block**:\n${policyDecision.violations.map((v) => `• ${v.message}`).join('\n')}`;
+      set((state) => ({
+        isGenerating: false,
+        messages: state.messages.map((m) =>
+          m.id === asstId ? { ...m, content: errorMsg, isStreaming: false } : m
+        ),
+      }));
+      return;
+    }
+
+    // Resolve @file mentions for grounding context with read access verification
     const mentions = extractFileMentions(trimmed);
     let enrichedContent = trimmed;
     if (mentions.length > 0) {
       const openBuffers = useEditorStore.getState().buffers;
+      const allowedMentions: string[] = [];
+      for (const m of mentions) {
+        const access = await evaluateFileAccess(m, 'read');
+        if (access.allowed) {
+          allowedMentions.push(m);
+        }
+      }
       const resolved = await Promise.all(
-        mentions.map((m) => resolveFileContent(m, openBuffers))
+        allowedMentions.map((m) => resolveFileContent(m, openBuffers))
       );
       const validFiles = resolved.filter(Boolean) as { relPath: string; content: string }[];
       if (validFiles.length > 0) {

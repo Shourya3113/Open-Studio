@@ -1,4 +1,5 @@
 import type { DiffHunk, FileDiff, DiffPreviewResult, HunkApplicationResult, MatchTier } from '../../types/diff';
+import { evaluateFileAccess } from '../security/policyEngine';
 
 /**
  * Parses line anchor hint from SEARCH block header (e.g. `<<<<<<< SEARCH (line 42)`).
@@ -406,6 +407,12 @@ export async function previewFrugalDiff(originalContent: string, hunks: DiffHunk
  * Applies a FileDiff to a workspace file via Tauri IPC with client fallback.
  */
 export async function applyFrugalDiff(workspaceRoot: string, fileDiff: FileDiff): Promise<DiffPreviewResult> {
+  const access = await evaluateFileAccess(fileDiff.filePath, 'write');
+  if (!access.allowed) {
+    const reason = access.violations.map((v) => v.message).join('; ');
+    throw new Error(`Policy violation: cannot apply diff to '${fileDiff.filePath}'. ${reason}`);
+  }
+
   try {
     const { invoke } = await import('@tauri-apps/api/core');
     return await invoke<DiffPreviewResult>('apply_frugal_diff', { workspaceRoot, fileDiff });

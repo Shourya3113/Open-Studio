@@ -17,6 +17,7 @@ export interface DefaultCommandsContext {
   openOnboardingModal?: () => void;
   openSymbolsPalette?: () => void;
   openAuditModal?: () => void;
+  openPolicyModal?: () => void;
 }
 
 export function createDefaultCommands(ctx: DefaultCommandsContext): PaletteCommand[] {
@@ -311,6 +312,17 @@ export function createDefaultCommands(ctx: DefaultCommandsContext): PaletteComma
       handler: () => {
         if (ctx.openAuditModal) {
           ctx.openAuditModal();
+        }
+      },
+    },
+    {
+      id: 'security:policy-rules',
+      title: 'Security: Open Policy & Governance Rules (.openstudio/rules.yaml)',
+      category: 'Security',
+      keywords: ['policy', 'rules', 'governance', 'security', 'boundaries', 'yaml', 'permissions', 'denied'],
+      handler: () => {
+        if (ctx.openPolicyModal) {
+          ctx.openPolicyModal();
         }
       },
     },

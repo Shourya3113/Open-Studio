@@ -34,10 +34,12 @@ import { CheckpointModal } from './components/git/CheckpointModal';
 import { CheckpointInspectorModal } from './components/git/CheckpointInspectorModal';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { AuditLogModal } from './components/security/AuditLogModal';
+import { PolicyRulesModal } from './components/security/PolicyRulesModal';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import { CommandPalette } from './components/palette/CommandPalette';
 import { useSettingsStore } from './stores/settingsStore';
 import { useAuditStore } from './stores/auditStore';
+import { usePolicyStore } from './stores/policyStore';
 import { usePaletteStore } from './stores/paletteStore';
 import { createDefaultCommands } from './features/palette/defaultCommands';
 import { useEditorStore } from './stores/editorStore';
@@ -228,6 +230,7 @@ export default function App() {
         openHardwareModal: () => setIsHardwareModalOpen(true),
         openCheckpointModal: () => setIsCheckpointModalOpen(true),
         openAuditModal: () => useAuditStore.getState().open(),
+        openPolicyModal: () => usePolicyStore.getState().open(),
         openSettingsModal: () => useSettingsStore.getState().openModal(),
         openOnboardingModal: () => useSettingsStore.getState().openOnboarding(),
         openSymbolsPalette: () => usePaletteStore.getState().open('symbols'),
@@ -878,6 +881,9 @@ export default function App() {
 
       {/* Cryptographic Audit Log & Tamper-Evident Inspector */}
       <AuditLogModal />
+
+      {/* Policy & Governance Rules Modal (.openstudio/rules.yaml) */}
+      <PolicyRulesModal />
 
       {/* First-Run Onboarding Wizard */}
       <OnboardingWizard />

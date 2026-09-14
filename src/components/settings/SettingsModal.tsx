@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAuditStore } from '../../stores/auditStore';
+import { usePolicyStore } from '../../stores/policyStore';
 import { logConfigChange } from '../../features/security/auditLogger';
 import { EditorTheme, WordWrapSetting } from '../../types/settings';
 
@@ -338,6 +339,24 @@ export const SettingsModal: React.FC = () => {
                   className="px-3 py-1.5 text-xs font-medium text-[#4ec9b0] border border-[#4ec9b0]/50 hover:bg-[#4ec9b0]/10 rounded transition-colors whitespace-nowrap"
                 >
                   View Audit Log
+                </button>
+              </div>
+              <div className="pt-3 border-t border-[#3e3e42]/40 flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-semibold text-white">Policy & Governance Rules</div>
+                  <p className="text-[11px] text-[#858585]">
+                    Path exclusions, model boundaries, and prompt guardrails via <code className="text-[#4ec9b0]">.openstudio/rules.yaml</code>.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeModal();
+                    usePolicyStore.getState().open();
+                  }}
+                  className="px-3 py-1.5 text-xs font-medium text-[#4ec9b0] border border-[#4ec9b0]/50 hover:bg-[#4ec9b0]/10 rounded transition-colors whitespace-nowrap"
+                >
+                  Manage Policy Rules
                 </button>
               </div>
             </div>

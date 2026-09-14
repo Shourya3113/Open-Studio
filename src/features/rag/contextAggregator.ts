@@ -6,6 +6,7 @@ import {
 } from '../../types/context';
 import { useEditorStore } from '../../stores/editorStore';
 import { searchBM25 } from './bm25Search';
+import { evaluateFileAccess } from '../security/policyEngine';
 
 /**
  * Aggregates multi-file codebase context combining BM25 snippet retrieval,
@@ -24,10 +25,18 @@ export async function aggregateContext(
     const maxSnippets = request.max_snippets || 5;
     const rawResults = await searchBM25(request.query, maxSnippets * 2);
 
+    const filteredResults = [];
+    for (const res of rawResults) {
+      const access = await evaluateFileAccess(res.file_path, 'read');
+      if (access.allowed) {
+        filteredResults.push(res);
+      }
+    }
+
     const activeNorm = request.active_file?.replace(/\\/g, '/').toLowerCase();
     const openNorm = (request.open_files || []).map((f) => f.replace(/\\/g, '/').toLowerCase());
 
-    const snippets = rawResults.map((res) => {
+    const snippets = filteredResults.map((res) => {
       const pathNorm = res.file_path.replace(/\\/g, '/').toLowerCase();
       const isActive = activeNorm === pathNorm;
       const isOpen = openNorm.includes(pathNorm);
