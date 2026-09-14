@@ -8,7 +8,7 @@ pub use network_guard::{
 
 pub use audit_logger::{
     create_audit_logger_state, export_audit_log_sql_cmd, log_audit_event_cmd,
-    query_audit_log_cmd, verify_audit_log_integrity_cmd, AuditActor, AuditEvent,
+    query_audit_log_cmd, sha256_hex, verify_audit_log_integrity_cmd, AuditActor, AuditEvent,
     AuditEventType, AuditIntegrityResult, AuditLogger, AuditLoggerState, AuditQueryFilter,
     CreateAuditEventInput,
 };

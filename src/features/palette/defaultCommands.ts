@@ -18,6 +18,7 @@ export interface DefaultCommandsContext {
   openSymbolsPalette?: () => void;
   openAuditModal?: () => void;
   openPolicyModal?: () => void;
+  openBenchmarkModal?: () => void;
 }
 
 export function createDefaultCommands(ctx: DefaultCommandsContext): PaletteCommand[] {
@@ -323,6 +324,18 @@ export function createDefaultCommands(ctx: DefaultCommandsContext): PaletteComma
       handler: () => {
         if (ctx.openPolicyModal) {
           ctx.openPolicyModal();
+        }
+      },
+    },
+    // --- Developer & Performance Diagnostics ---
+    {
+      id: 'developer:benchmark',
+      title: 'Developer: Run IDE Performance Benchmark Suite',
+      category: 'Developer',
+      keywords: ['benchmark', 'performance', 'latency', 'ttft', 'diff', 'index', 'ledger', 'profile', 'slo'],
+      handler: () => {
+        if (ctx.openBenchmarkModal) {
+          ctx.openBenchmarkModal();
         }
       },
     },

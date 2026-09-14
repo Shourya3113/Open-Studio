@@ -35,11 +35,13 @@ import { CheckpointInspectorModal } from './components/git/CheckpointInspectorMo
 import { SettingsModal } from './components/settings/SettingsModal';
 import { AuditLogModal } from './components/security/AuditLogModal';
 import { PolicyRulesModal } from './components/security/PolicyRulesModal';
+import { BenchmarkModal } from './components/benchmark/BenchmarkModal';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import { CommandPalette } from './components/palette/CommandPalette';
 import { useSettingsStore } from './stores/settingsStore';
 import { useAuditStore } from './stores/auditStore';
 import { usePolicyStore } from './stores/policyStore';
+import { useBenchmarkStore } from './stores/benchmarkStore';
 import { usePaletteStore } from './stores/paletteStore';
 import { createDefaultCommands } from './features/palette/defaultCommands';
 import { useEditorStore } from './stores/editorStore';
@@ -231,6 +233,7 @@ export default function App() {
         openCheckpointModal: () => setIsCheckpointModalOpen(true),
         openAuditModal: () => useAuditStore.getState().open(),
         openPolicyModal: () => usePolicyStore.getState().open(),
+        openBenchmarkModal: () => useBenchmarkStore.getState().open(),
         openSettingsModal: () => useSettingsStore.getState().openModal(),
         openOnboardingModal: () => useSettingsStore.getState().openOnboarding(),
         openSymbolsPalette: () => usePaletteStore.getState().open('symbols'),
@@ -884,6 +887,9 @@ export default function App() {
 
       {/* Policy & Governance Rules Modal (.openstudio/rules.yaml) */}
       <PolicyRulesModal />
+
+      {/* Performance Benchmarks & SLO Diagnostics Modal */}
+      <BenchmarkModal />
 
       {/* First-Run Onboarding Wizard */}
       <OnboardingWizard />
