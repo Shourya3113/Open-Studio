@@ -11,7 +11,10 @@
     "extensions:test": "vitest run extensions/vscode",
     "preview": "vite preview",
     "verify:airgap": "node scripts/verify-airgap.mjs",
+    "verify:packaging": "node scripts/verify-packaging.mjs",
     "benchmark": "node scripts/benchmark-suite.mjs",
+    "package": "node scripts/build-installers.mjs",
+    "package:dry-run": "node scripts/build-installers.mjs --dry-run",
     "tauri": "tauri"
   },
   "dependencies": {

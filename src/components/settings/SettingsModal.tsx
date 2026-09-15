@@ -5,6 +5,7 @@ import { usePolicyStore } from '../../stores/policyStore';
 import { useBenchmarkStore } from '../../stores/benchmarkStore';
 import { logConfigChange } from '../../features/security/auditLogger';
 import { EditorTheme, WordWrapSetting } from '../../types/settings';
+import { getReleaseMetadata, getRecommendedInstaller } from '../../features/system/releaseInfo';
 
 export const SettingsModal: React.FC = () => {
   const { settings, isModalOpen, closeModal, updateSettings, resetToDefaults } = useSettingsStore();
@@ -377,6 +378,22 @@ export const SettingsModal: React.FC = () => {
                 >
                   Run Benchmark Suite
                 </button>
+              </div>
+              <div className="pt-3 border-t border-[#3e3e42]/40 flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-semibold text-white flex items-center gap-2">
+                    <span>Multi-Platform Packaging & Installers</span>
+                    <span className="px-1.5 py-0.5 text-[10px] font-medium bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 rounded">
+                      Verified
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#858585] mt-0.5">
+                    Target: <span className="text-white font-mono">{getRecommendedInstaller().label}</span> • Targets: Windows (<code className="text-[#4ec9b0]">.msi</code>, <code className="text-[#4ec9b0]">.exe</code>), macOS (<code className="text-[#4ec9b0]">.dmg</code>), Linux (<code className="text-[#4ec9b0]">.AppImage</code>, <code className="text-[#4ec9b0]">.deb</code>).
+                  </p>
+                </div>
+                <div className="text-[11px] font-mono text-[#858585] text-right">
+                  v{getReleaseMetadata().version}
+                </div>
               </div>
             </div>
           </div>
