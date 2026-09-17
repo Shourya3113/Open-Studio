@@ -102,9 +102,9 @@ export const OnboardingWizard: React.FC = () => {
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#2d2d30] bg-[#252526]">
           <div className="flex items-center gap-2">
             <span className="text-xl">🚀</span>
-            <div>
-              <span className="text-sm font-semibold text-white">Open Studio Setup Wizard</span>
-              <span className="ml-2 text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-950 text-blue-400 border border-blue-800/40">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-semibold text-white whitespace-nowrap">Open Studio Setup Wizard</span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-950 text-blue-400 border border-blue-800/40 whitespace-nowrap">
                 100% Offline Air-Gap
               </span>
             </div>
@@ -211,7 +211,7 @@ export const OnboardingWizard: React.FC = () => {
 
               {/* Hardware Telemetry Card */}
               <div className="bg-[#252526] p-4 rounded-lg border border-[#2d2d30] space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-3">
                   <div className="text-xs font-semibold text-white flex items-center gap-2">
                     <span>🖥️ Detected Hardware Profile</span>
                     {hardwareTier && (
@@ -223,7 +223,7 @@ export const OnboardingWizard: React.FC = () => {
                   <button
                     onClick={runDiagnostics}
                     disabled={isChecking}
-                    className="px-2 py-0.5 text-[11px] bg-[#3e3e42] hover:bg-[#4e4e52] rounded text-white transition-colors"
+                    className="px-2.5 py-1 text-[11px] whitespace-nowrap shrink-0 bg-[#3e3e42] hover:bg-[#4e4e52] rounded text-white transition-colors"
                   >
                     {isChecking ? 'Scanning...' : 'Re-scan Hardware'}
                   </button>
