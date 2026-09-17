@@ -9,6 +9,8 @@
     "test": "vitest run",
     "extensions:compile": "tsc -p extensions/vscode",
     "extensions:test": "vitest run extensions/vscode",
+    "web:dev": "vite web",
+    "web:build": "vite build web",
     "preview": "vite preview",
     "verify:airgap": "node scripts/verify-airgap.mjs",
     "verify:packaging": "node scripts/verify-packaging.mjs",

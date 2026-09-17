@@ -19,6 +19,7 @@ export interface DefaultCommandsContext {
   openAuditModal?: () => void;
   openPolicyModal?: () => void;
   openBenchmarkModal?: () => void;
+  openHubModal?: () => void;
 }
 
 export function createDefaultCommands(ctx: DefaultCommandsContext): PaletteCommand[] {
@@ -218,6 +219,19 @@ export function createDefaultCommands(ctx: DefaultCommandsContext): PaletteComma
       keywords: ['benchmark', 'latency', 'speed', 'autocomplete', 'test', 'burst'],
       handler: async () => {
         await autocompleteTracker.runBenchmarkBurst(5);
+      },
+    },
+    {
+      id: 'ai:model-hub',
+      title: 'AI: Open Sovereign Model Hub (openstudio.com)',
+      category: 'AI Assistant',
+      keywords: ['hub', 'model', 'weights', 'download', 'gguf', 'registry', 'openstudio'],
+      handler: () => {
+        if (ctx.openHubModal) {
+          ctx.openHubModal();
+        } else {
+          window.open('https://openstudio.com/models', '_blank'); // airgap-allow: official model registry portal
+        }
       },
     },
 

@@ -140,4 +140,18 @@ describe('Default Commands Registry & Execution', () => {
     );
     expect(splitMatches.length).toBeGreaterThanOrEqual(3);
   });
+
+  it('triggers Model Hub command from palette', () => {
+    const openHubModal = vi.fn();
+    const ctxWithHub = { ...mockCtx, openHubModal };
+    const commands = createDefaultCommands(ctxWithHub);
+    const hubCmd = commands.find((c) => c.id === 'ai:model-hub');
+
+    expect(hubCmd).toBeDefined();
+    expect(hubCmd?.title).toContain('Model Hub');
+    expect(hubCmd?.category).toBe('AI Assistant');
+
+    hubCmd?.handler();
+    expect(openHubModal).toHaveBeenCalledTimes(1);
+  });
 });
