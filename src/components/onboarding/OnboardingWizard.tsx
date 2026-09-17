@@ -4,7 +4,7 @@ import { checkInferenceHealth } from '../../services/inference';
 import { 
   getHardwareTier, 
   HardwareTierInfo, 
-  classifyHardwareTier,
+  classifyHardwareTier, 
   formatTokenBudget 
 } from '../../features/inference/hardwareTier';
 import {
@@ -12,6 +12,13 @@ import {
   HardwareCalibratedRecommendation,
 } from '../../features/onboarding/modelDetector';
 import { ModelInfo } from '../../types/inference';
+import {
+  checkOllamaInstalled,
+  startOllamaDaemon,
+  pollOllamaUntilOnline,
+  pullOllamaModelStream,
+  PullProgress,
+} from '../../services/ollamaManager';
 
 export const OnboardingWizard: React.FC = () => {
   const { 
@@ -25,6 +32,12 @@ export const OnboardingWizard: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isChecking, setIsChecking] = useState<boolean>(false);
   const [isOllamaOnline, setIsOllamaOnline] = useState<boolean | null>(null);
+  const [isOllamaInstalled, setIsOllamaInstalled] = useState<boolean | null>(null);
+  const [isStartingOllama, setIsStartingOllama] = useState<boolean>(false);
+  const [startOllamaError, setStartOllamaError] = useState<string | null>(null);
+  const [activeDownloads, setActiveDownloads] = useState<Record<string, PullProgress>>({});
+  const [isBatchDownloading, setIsBatchDownloading] = useState<boolean>(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [hardwareTier, setHardwareTier] = useState<HardwareTierInfo | null>(null);
   const [rawModels, setRawModels] = useState<ModelInfo[]>([]);
   const [calibration, setCalibration] = useState<HardwareCalibratedRecommendation | null>(null);
@@ -43,18 +56,20 @@ export const OnboardingWizard: React.FC = () => {
   const runDiagnostics = async () => {
     setIsChecking(true);
     try {
-      const [tier, health] = await Promise.all([
+      const [tier, health, installStatus] = await Promise.all([
         getHardwareTier().catch(() => classifyHardwareTier(4096, 16384)),
         checkInferenceHealth(settings.ollamaEndpoint).catch(() => ({
           online: false,
           endpoint: settings.ollamaEndpoint,
           models: [],
         })),
+        checkOllamaInstalled().catch(() => ({ installed: false })),
       ]);
 
       setHardwareTier(tier);
       setIsOllamaOnline(health.online);
       setRawModels(health.models || []);
+      setIsOllamaInstalled(installStatus.installed ?? false);
 
       const cal = calibrateModelsWithHardware(tier, health.models || [], health.online);
       setCalibration(cal);
@@ -63,6 +78,7 @@ export const OnboardingWizard: React.FC = () => {
       setHardwareTier(fallbackTier);
       setIsOllamaOnline(false);
       setRawModels([]);
+      setIsOllamaInstalled(false);
       setCalibration(calibrateModelsWithHardware(fallbackTier, [], false));
     } finally {
       setIsChecking(false);
@@ -73,6 +89,92 @@ export const OnboardingWizard: React.FC = () => {
     navigator.clipboard.writeText(text);
     setCopiedCommand(text);
     setTimeout(() => setCopiedCommand(null), 2000);
+  };
+
+  const handleStartOllamaService = async () => {
+    setIsStartingOllama(true);
+    setStartOllamaError(null);
+    try {
+      await startOllamaDaemon();
+      const online = await pollOllamaUntilOnline(settings.ollamaEndpoint, 15000, 750);
+      if (online) {
+        await runDiagnostics();
+      } else {
+        setStartOllamaError('Timed out waiting for Ollama loopback connection. Try starting manually or check permissions.');
+      }
+    } catch (err: any) {
+      setStartOllamaError(err?.message || 'Failed to start Ollama daemon.');
+    } finally {
+      setIsStartingOllama(false);
+    }
+  };
+
+  const handlePullModel = async (modelName: string) => {
+    setDownloadError(null);
+    setActiveDownloads((prev) => ({
+      ...prev,
+      [modelName]: {
+        modelName,
+        status: 'Starting download...',
+        percent: 0,
+      },
+    }));
+
+    try {
+      await pullOllamaModelStream(
+        modelName,
+        (progress) => {
+          setActiveDownloads((prev) => ({
+            ...prev,
+            [modelName]: progress,
+          }));
+        },
+        settings.ollamaEndpoint
+      );
+
+      setActiveDownloads((prev) => ({
+        ...prev,
+        [modelName]: {
+          modelName,
+          status: 'success',
+          percent: 100,
+        },
+      }));
+
+      // Re-run diagnostics to update installed models list and readiness score
+      await runDiagnostics();
+    } catch (err: any) {
+      const errMsg = err?.message || 'Download failed';
+      setDownloadError(`Failed to download ${modelName}: ${errMsg}`);
+      setActiveDownloads((prev) => ({
+        ...prev,
+        [modelName]: {
+          modelName,
+          status: `failed: ${errMsg}`,
+          percent: 0,
+        },
+      }));
+    }
+  };
+
+  const handleDownloadAllRecommended = async () => {
+    if (!calibration) return;
+    const missing = calibration.missingModels.filter((m) => !m.isInstalled);
+    if (missing.length === 0) return;
+
+    setIsBatchDownloading(true);
+    setDownloadError(null);
+
+    for (const item of missing) {
+      try {
+        await handlePullModel(item.modelName);
+      } catch {
+        break;
+      }
+    }
+
+    setIsBatchDownloading(false);
+    await runDiagnostics();
   };
 
   const handleApplyRecommendedConfig = () => {
@@ -282,22 +384,75 @@ export const OnboardingWizard: React.FC = () => {
                 </div>
 
                 {!isOllamaOnline && (
-                  <div className="bg-[#1e1e1e] p-3 rounded border border-amber-500/30 text-xs space-y-2">
-                    <div className="font-semibold text-amber-400 flex items-center gap-1.5">
-                      <span>⚠️ Quick Diagnostic & Setup Guide</span>
-                    </div>
-                    <div className="text-[11px] text-[#cccccc] space-y-1">
-                      <div>
-                        1. Start Ollama in your workstation terminal:
-                        <code className="ml-1 bg-black/40 px-1.5 py-0.5 rounded font-mono text-[#4ec9b0]">
-                          ollama serve
-                        </code>
+                  <div className="bg-[#1e1e1e] p-3.5 rounded border border-amber-500/30 text-xs space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="font-semibold text-amber-400 flex items-center gap-1.5">
+                        <span>⚠️ Ollama Daemon Required</span>
                       </div>
-                      <div>
-                        2. Air-Gapped Workstations: Ensure models were loaded via local archive or system service.
-                      </div>
+                      {isOllamaInstalled && (
+                        <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-1.5 py-0.5 rounded">
+                          CLI Detected on Host
+                        </span>
+                      )}
                     </div>
-                    <div className="pt-1 flex items-center justify-between">
+
+                    <p className="text-[11px] text-[#858585] leading-relaxed">
+                      Open Studio connects strictly to local loopback <code className="text-[#4ec9b0]">{settings.ollamaEndpoint}</code> for 100% private inference.
+                    </p>
+
+                    {isOllamaInstalled ? (
+                      <div className="pt-1 flex flex-col gap-2">
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={handleStartOllamaService}
+                            disabled={isStartingOllama || isChecking}
+                            className="px-3 py-1.5 text-xs font-semibold bg-[#007acc] hover:bg-[#0062a3] disabled:opacity-50 text-white rounded transition-colors flex items-center gap-2 shadow-sm"
+                          >
+                            {isStartingOllama ? (
+                              <>
+                                <span className="animate-spin text-sm">⏳</span>
+                                <span>Starting Ollama Daemon...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>▶</span>
+                                <span>Start Ollama Service</span>
+                              </>
+                            )}
+                          </button>
+                          <span className="text-[11px] text-[#858585]">
+                            Launches background process automatically without terminal windows.
+                          </span>
+                        </div>
+                        {startOllamaError && (
+                          <div className="text-[11px] text-red-400 bg-red-950/40 border border-red-800/40 p-2 rounded">
+                            {startOllamaError}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-[#cccccc] space-y-1 pt-1">
+                        <div>
+                          1. Download and install Ollama from official site:{' '}
+                          <a
+                            href="https://ollama.com/download" // airgap-allow: official documentation download link
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[#007acc] hover:underline font-medium"
+                          >
+                            ollama.com/download
+                          </a>
+                        </div>
+                        <div>
+                          2. Or start Ollama in your workstation terminal:{' '}
+                          <code className="bg-black/40 px-1.5 py-0.5 rounded font-mono text-[#4ec9b0]">
+                            ollama serve
+                          </code>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="pt-1 flex items-center justify-between border-t border-[#2d2d30]">
                       <button
                         onClick={() => setUseMockFallback(true)}
                         className="text-[11px] text-[#007acc] hover:underline"
@@ -391,38 +546,131 @@ export const OnboardingWizard: React.FC = () => {
                 </div>
               )}
 
-              {/* Missing Recommended Models Helper */}
-              {calibration && calibration.missingModels.length > 0 && (
-                <div className="space-y-2">
-                  <div className="text-xs font-semibold text-white">
-                    Recommended Models to Pull via Local Terminal:
-                  </div>
-                  <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
-                    {calibration.missingModels.map((item) => (
-                      <div
-                        key={item.modelName}
-                        className="bg-[#252526] p-2.5 rounded border border-[#2d2d30] flex items-center justify-between"
+              {/* Interactive Recommended Model Downloader & Suite */}
+              {calibration && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="text-xs font-semibold text-white flex items-center gap-2">
+                      <span>Recommended Models for {calibration.tier}:</span>
+                      {calibration.missingModels.length === 0 ? (
+                        <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-1.5 py-0.5 rounded">
+                          ✓ All Models Ready
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-amber-400 bg-amber-950/60 border border-amber-800/40 px-1.5 py-0.5 rounded">
+                          {calibration.missingModels.length} to download
+                        </span>
+                      )}
+                    </div>
+
+                    {calibration.missingModels.length > 0 && isOllamaOnline && (
+                      <button
+                        onClick={handleDownloadAllRecommended}
+                        disabled={isBatchDownloading || Object.values(activeDownloads).some((d) => d.percent !== undefined && d.percent < 100 && d.status !== 'failed')}
+                        className="px-2.5 py-1 text-[11px] font-medium bg-[#007acc] hover:bg-[#0062a3] disabled:opacity-50 rounded text-white transition-colors flex items-center gap-1.5 shadow-sm"
                       >
-                        <div className="min-w-0 flex-1 pr-2">
-                          <div className="text-xs font-medium text-white flex items-center gap-2">
-                            <span className="font-mono text-[#4ec9b0]">{item.modelName}</span>
-                            <span className="text-[10px] bg-blue-950 text-blue-300 px-1 py-0.2 rounded font-sans">
-                              {item.roleLabel}
-                            </span>
-                            <span className="text-[10px] text-[#858585]">{item.memoryRequirement}</span>
-                          </div>
-                          <p className="text-[11px] text-[#858585] mt-0.5 truncate">
-                            {item.description}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => copyToClipboard(item.pullCommand)}
-                          className="px-2 py-1 text-[11px] bg-[#1e1e1e] border border-[#3e3e42] hover:border-[#007acc] rounded text-white shrink-0 font-mono"
+                        {isBatchDownloading ? (
+                          <>
+                            <span className="animate-spin text-xs">⏳</span>
+                            <span>Downloading Missing Models...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>⬇</span>
+                            <span>Download Recommended Models</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+
+                  {downloadError && (
+                    <div className="text-[11px] text-red-400 bg-red-950/40 border border-red-800/40 p-2 rounded">
+                      {downloadError}
+                    </div>
+                  )}
+
+                  {/* Recommended Models List */}
+                  <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                    {(calibration.tierModels || calibration.missingModels).map((item) => {
+                      const download = activeDownloads[item.modelName];
+                      const isDownloading = download && (download.percent !== undefined || download.status.includes('download') || download.status.includes('pull') || download.status.includes('verify')) && download.status !== 'success' && !download.status.startsWith('failed');
+                      const isDownloaded = item.isInstalled || (download && download.status === 'success');
+
+                      return (
+                        <div
+                          key={item.modelName}
+                          className="bg-[#252526] p-3 rounded border border-[#2d2d30] space-y-2"
                         >
-                          {copiedCommand === item.pullCommand ? '✓ Copied' : 'Copy Pull Command'}
-                        </button>
-                      </div>
-                    ))}
+                          <div className="flex items-center justify-between">
+                            <div className="min-w-0 flex-1 pr-2">
+                              <div className="text-xs font-medium text-white flex items-center gap-2">
+                                <span className="font-mono text-[#4ec9b0] font-semibold">{item.modelName}</span>
+                                <span className="text-[10px] bg-blue-950 text-blue-300 border border-blue-800/40 px-1.5 py-0.2 rounded font-sans">
+                                  {item.roleLabel}
+                                </span>
+                                <span className="text-[10px] text-[#858585]">{item.parameterSize} • {item.memoryRequirement}</span>
+                              </div>
+                              <p className="text-[11px] text-[#858585] mt-0.5 truncate">
+                                {item.description}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              {isDownloaded ? (
+                                <span className="text-[11px] font-medium text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2.5 py-1 rounded flex items-center gap-1">
+                                  <span>✓</span>
+                                  <span>Already Installed</span>
+                                </span>
+                              ) : isDownloading ? (
+                                <span className="text-[11px] font-mono text-blue-400 bg-blue-950/60 border border-blue-800/40 px-2 py-1 rounded flex items-center gap-1.5">
+                                  <span className="animate-spin">⏳</span>
+                                  <span>{download.percent !== undefined ? `${download.percent}%` : 'Pulling...'}</span>
+                                </span>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => handlePullModel(item.modelName)}
+                                    disabled={!isOllamaOnline || isBatchDownloading}
+                                    className="px-2.5 py-1 text-[11px] bg-[#007acc] hover:bg-[#0062a3] disabled:opacity-40 rounded text-white font-medium transition-colors flex items-center gap-1"
+                                  >
+                                    <span>⬇</span>
+                                    <span>Pull Model</span>
+                                  </button>
+                                  <button
+                                    onClick={() => copyToClipboard(item.pullCommand)}
+                                    title="Copy terminal command"
+                                    className="px-2 py-1 text-[11px] bg-[#1e1e1e] border border-[#3e3e42] hover:border-[#007acc] rounded text-[#858585] hover:text-white transition-colors"
+                                  >
+                                    {copiedCommand === item.pullCommand ? '✓ Copied' : 'CLI'}
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Progress Bar for actively downloading models */}
+                          {isDownloading && download && (
+                            <div className="space-y-1 pt-1 border-t border-[#2d2d30]/60">
+                              <div className="flex items-center justify-between text-[10px] text-[#858585]">
+                                <span className="truncate max-w-[320px] font-mono">{download.status}</span>
+                                <span className="font-mono">
+                                  {download.completedBytes && download.totalBytes
+                                    ? `${(download.completedBytes / (1024 * 1024)).toFixed(0)} MB / ${(download.totalBytes / (1024 * 1024)).toFixed(0)} MB`
+                                    : download.percent !== undefined ? `${download.percent}%` : ''}
+                                </span>
+                              </div>
+                              <div className="w-full bg-[#1e1e1e] h-1.5 rounded-full overflow-hidden border border-[#3e3e42]/40">
+                                <div
+                                  className="bg-blue-500 h-full rounded-full transition-all duration-200"
+                                  style={{ width: `${download.percent ?? 10}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

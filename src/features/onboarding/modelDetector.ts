@@ -42,6 +42,7 @@ export interface HardwareCalibratedRecommendation {
     reasoningModel: string;
   };
   missingModels: RecommendedModelCard[];
+  tierModels: RecommendedModelCard[];
   installedModels: DetectedModelInfo[];
   readinessScore: number;
   isFullyConfigured: boolean;
@@ -327,9 +328,7 @@ export function calibrateModelsWithHardware(
     reasoningModel: reasoningMatch.modelName,
   };
 
-  // Identify missing recommended models for the tier
-  const missingModels: RecommendedModelCard[] = [];
-
+  // Identify recommended tier suite and missing models
   const rolesToCheck: Array<{
     role: ModelRole;
     label: string;
@@ -367,13 +366,15 @@ export function calibrateModelsWithHardware(
     },
   ];
 
+  const tierModelsMap = new Map<string, RecommendedModelCard>();
+
   for (const item of rolesToCheck) {
     const isInstalled = installedModels.some(
       (m) => m.name.toLowerCase() === item.target.name.toLowerCase()
     );
 
-    if (!isInstalled) {
-      missingModels.push({
+    if (!tierModelsMap.has(item.target.name.toLowerCase())) {
+      tierModelsMap.set(item.target.name.toLowerCase(), {
         role: item.role,
         roleLabel: item.label,
         modelName: item.target.name,
@@ -381,10 +382,13 @@ export function calibrateModelsWithHardware(
         memoryRequirement: item.target.ramReq,
         description: item.desc,
         pullCommand: `ollama pull ${item.target.name}`,
-        isInstalled: false,
+        isInstalled,
       });
     }
   }
+
+  const tierModels = Array.from(tierModelsMap.values());
+  const missingModels = tierModels.filter((m) => !m.isInstalled);
 
   // Calculate readiness score (0 - 100%)
   let coveredCount = 0;
@@ -404,6 +408,7 @@ export function calibrateModelsWithHardware(
     context_budget: tierInfo.context_budget,
     recommendedConfig,
     missingModels,
+    tierModels,
     installedModels,
     readinessScore,
     isFullyConfigured,

@@ -159,8 +159,9 @@ describe('modelDetector (Day 57)', () => {
       const res = calibrateModelsWithHardware(tier2Profile, [], false);
       expect(res.isOllamaOnline).toBe(false);
       expect(res.readinessScore).toBe(0);
-      expect(res.isFullyConfigured).toBe(false);
-      expect(res.missingModels).toHaveLength(4);
+      expect(res.missingModels).toHaveLength(3);
+      expect(res.tierModels).toHaveLength(3);
+      expect(res.tierModels.every((m) => !m.isInstalled)).toBe(true);
     });
 
     it('maps alternative installed models when preferred ones are absent', () => {

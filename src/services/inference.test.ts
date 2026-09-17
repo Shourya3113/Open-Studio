@@ -3,10 +3,25 @@ import { checkInferenceHealth, streamCompletion } from './inference';
 
 describe('Inference Service', () => {
   it('checks inference health and returns model list', async () => {
-    const health = await checkInferenceHealth('http://localhost:11434');
-    expect(health.online).toBe(true);
-    expect(health.models.length).toBeGreaterThan(0);
-    expect(health.models.some(m => m.name.includes('qwen2.5-coder'))).toBe(true);
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        models: [
+          { name: 'qwen2.5-coder:1.5b', size: 986000000 },
+          { name: 'qwen2.5-coder:7b', size: 4500000000 },
+        ],
+      }),
+    } as any);
+
+    try {
+      const health = await checkInferenceHealth('http://localhost:11434');
+      expect(health.online).toBe(true);
+      expect(health.models.length).toBeGreaterThan(0);
+      expect(health.models.some(m => m.name.includes('qwen2.5-coder'))).toBe(true);
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 
   it('streams tokens and fires onDone completion callback', async () => {

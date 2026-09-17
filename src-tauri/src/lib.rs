@@ -39,6 +39,8 @@ pub fn run() {
             terminal::resize_terminal,
             terminal::close_terminal_session,
             inference::check_inference_health,
+            inference::daemon::check_ollama_installed,
+            inference::daemon::start_ollama_service,
             inference::stream_completion,
             inference::abort_completion,
             inference::get_hardware_tier,

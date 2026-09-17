@@ -120,4 +120,45 @@ describe('OnboardingWizard (Day 57 Polish)', () => {
     expect(formatTokenBudget(4096)).toBe('4k tokens');
     expect(formatTokenBudget(512)).toBe('512 tokens');
   });
+
+  it('correctly marks already installed models with isInstalled and skips them from missingModels', () => {
+    const tier = classifyHardwareTier(4096, 16384); // Tier 3 Budget
+    // Simulate user already having qwen2.5-coder:1.5b downloaded, but missing 7b models
+    const partiallyInstalled = [
+      { name: 'qwen2.5-coder:1.5b', size: 986000000 },
+    ];
+
+    const cal = calibrateModelsWithHardware(tier, partiallyInstalled, true);
+    
+    // Check tierModels
+    expect(cal.tierModels).toBeDefined();
+    const model15b = cal.tierModels.find((m) => m.modelName === 'qwen2.5-coder:1.5b');
+    const model7b = cal.tierModels.find((m) => m.modelName === 'qwen2.5-coder:7b');
+    const modelR1 = cal.tierModels.find((m) => m.modelName === 'deepseek-r1:7b');
+
+    expect(model15b?.isInstalled).toBe(true);
+    expect(model7b?.isInstalled).toBe(false);
+    expect(modelR1?.isInstalled).toBe(false);
+
+    // missingModels must only contain the uninstalled ones (skipping 1.5b)
+    expect(cal.missingModels.map((m) => m.modelName)).not.toContain('qwen2.5-coder:1.5b');
+    expect(cal.missingModels.map((m) => m.modelName)).toContain('qwen2.5-coder:7b');
+    expect(cal.missingModels.map((m) => m.modelName)).toContain('deepseek-r1:7b');
+  });
+
+  it('skips all downloads and reports 100% readiness when all tier models are pre-installed', () => {
+    const tier = classifyHardwareTier(4096, 16384);
+    const fullyInstalled = [
+      { name: 'qwen2.5-coder:1.5b', size: 986000000 },
+      { name: 'qwen2.5-coder:7b', size: 4700000000 },
+      { name: 'deepseek-r1:7b', size: 4900000000 },
+    ];
+
+    const cal = calibrateModelsWithHardware(tier, fullyInstalled, true);
+    expect(cal.missingModels).toHaveLength(0);
+    expect(cal.isFullyConfigured).toBe(true);
+    expect(cal.readinessScore).toBe(100);
+    expect(cal.tierModels.every((m) => m.isInstalled)).toBe(true);
+  });
 });
+

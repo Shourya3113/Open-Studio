@@ -1,8 +1,10 @@
 pub mod client;
+pub mod daemon;
 pub mod queue;
 pub mod swapper;
 
 pub use client::{CompletionRequest, InferenceHealth, InferenceManager, ModelInfo};
+pub use daemon::{check_ollama_installed, start_ollama_service, OllamaInstallStatus};
 pub use queue::{InferencePriority, InferenceQueue};
 pub use swapper::{HardwareTier, HardwareTierInfo, ModelResidency, ModelSwapper};
 use tauri::State;
