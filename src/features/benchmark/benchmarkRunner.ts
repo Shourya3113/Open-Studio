@@ -286,19 +286,26 @@ export async function benchmarkVectorStore(): Promise<BenchmarkCategoryResult> {
     vectors.push(vec.map((v) => v / norm));
   }
 
-  // Benchmark top-K cosine similarity search over 1,000 vectors across 3 runs
+  // Quick JIT warmup
+  for (let i = 0; i < 100; i++) {
+    let dot = 0;
+    const v = vectors[i];
+    for (let d = 0; d < dimension; d++) dot += queryVector[d] * v[d];
+  }
+
+  // Benchmark top-K cosine similarity search over 1,000 vectors across 5 trials
   const searchLatencies: number[] = [];
   let topK: { index: number; score: number }[] = [];
-  for (let trial = 0; trial < 3; trial++) {
+  for (let trial = 0; trial < 5; trial++) {
     const searchStart = performance.now();
-    const scores: { index: number; score: number }[] = [];
+    const scores: { index: number; score: number }[] = new Array(numVectors);
     for (let i = 0; i < numVectors; i++) {
       let dot = 0;
       const v = vectors[i];
       for (let d = 0; d < dimension; d++) {
         dot += queryVector[d] * v[d];
       }
-      scores.push({ index: i, score: dot });
+      scores[i] = { index: i, score: dot };
     }
     scores.sort((a, b) => b.score - a.score);
     topK = scores.slice(0, 5);

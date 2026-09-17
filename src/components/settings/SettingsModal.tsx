@@ -8,7 +8,7 @@ import { EditorTheme, WordWrapSetting } from '../../types/settings';
 import { getReleaseMetadata, getRecommendedInstaller } from '../../features/system/releaseInfo';
 
 export const SettingsModal: React.FC = () => {
-  const { settings, isModalOpen, closeModal, updateSettings, resetToDefaults } = useSettingsStore();
+  const { settings, isModalOpen, closeModal, updateSettings, resetToDefaults, openOnboarding } = useSettingsStore();
 
   const [ollamaEndpoint, setOllamaEndpoint] = useState(settings.ollamaEndpoint);
   const [autocompleteModel, setAutocompleteModel] = useState(settings.autocompleteModel);
@@ -121,9 +121,21 @@ export const SettingsModal: React.FC = () => {
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Section: Local AI & Inference */}
           <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#007acc] mb-3">
-              🤖 Local AI & Inference Gateway
-            </h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-[#007acc]">
+                🤖 Local AI & Inference Gateway
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  closeModal();
+                  openOnboarding();
+                }}
+                className="px-2.5 py-1 text-[11px] font-medium text-[#4ec9b0] border border-[#4ec9b0]/40 hover:bg-[#4ec9b0]/10 rounded transition-colors"
+              >
+                Launch Diagnostic Wizard 🚀
+              </button>
+            </div>
             <div className="space-y-4 bg-[#252526] p-4 rounded border border-[#2d2d30]">
               <div>
                 <label className="block text-xs font-medium text-white mb-1">

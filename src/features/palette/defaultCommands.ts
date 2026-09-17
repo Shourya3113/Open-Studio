@@ -304,6 +304,17 @@ export function createDefaultCommands(ctx: DefaultCommandsContext): PaletteComma
         }
       },
     },
+    {
+      id: 'setup:diagnostic-wizard',
+      title: 'Help: Local AI & Hardware Diagnostic Setup Wizard',
+      category: 'Help',
+      keywords: ['wizard', 'onboarding', 'diagnostic', 'setup', 'first-run', 'ollama', 'hardware', 'models', 'calibrate'],
+      handler: () => {
+        if (ctx.openOnboardingModal) {
+          ctx.openOnboardingModal();
+        }
+      },
+    },
     // --- Security & Audit ---
     {
       id: 'security:audit-log',
