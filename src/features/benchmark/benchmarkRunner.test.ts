@@ -116,7 +116,7 @@ describe('Performance Benchmarking Engine (benchmarkRunner)', () => {
     expect(report.summary.totalTests).toBeGreaterThanOrEqual(10);
     expect(report.summary.passedCount).toBeGreaterThan(0);
     expect(report.totalDurationMs).toBeGreaterThan(0);
-    expect(report.version).toBe('0.1.0');
+    expect(report.version).toBe('1.0.0');
     expect(report.timestamp).toBeGreaterThan(0);
   });
 });
@@ -158,7 +158,7 @@ describe('useBenchmarkStore (Zustand Store)', () => {
     const jsonStr = updated.exportReportJson();
     expect(typeof jsonStr).toBe('string');
     const parsed = JSON.parse(jsonStr);
-    expect(parsed.version).toBe('0.1.0');
+    expect(parsed.version).toBe('1.0.0');
     expect(parsed.categories.length).toBe(6);
 
     // Clear history

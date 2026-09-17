@@ -26,7 +26,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, '..');
 
-const RELEASE_CANDIDATE_TAG = 'v1.0.0-rc1';
+const RELEASE_TAG = 'v1.0.0';
 const MANIFEST_PATH = path.join(ROOT_DIR, '.openstudio', 'release-manifest.json');
 
 function computeFileSha256(filePath) {
@@ -36,12 +36,12 @@ function computeFileSha256(filePath) {
   return crypto.createHash('sha256').update(buffer).digest('hex');
 }
 
-export async function verifyReleaseCandidate(options = {}) {
+export async function verifyRelease(options = {}) {
   const startTime = Date.now();
   const scorecard = [];
 
   console.log('\n=============================================================');
-  console.log(`🚀 OPEN STUDIO: RELEASE CANDIDATE VERIFIER (${RELEASE_CANDIDATE_TAG})`);
+  console.log(`🚀 OPEN STUDIO: PRODUCTION RELEASE VERIFIER (${RELEASE_TAG})`);
   console.log('=============================================================\n');
 
   function recordGate(name, description, passed, details = '') {
@@ -137,7 +137,7 @@ export async function verifyReleaseCandidate(options = {}) {
     }
 
     // Stage 9: Generate Release Manifest
-    console.log('\n📜 Stage 9/9: Generating Cryptographic Release Candidate Manifest...');
+    console.log('\n📜 Stage 9/9: Generating Cryptographic Release Manifest...');
     const trackedFiles = [
       'package.json',
       'src-tauri/tauri.conf.json',
@@ -148,7 +148,9 @@ export async function verifyReleaseCandidate(options = {}) {
       'CONTRIBUTING.md',
       'docs/ARCHITECTURE.md',
       'docs/AIRGAP_VERIFICATION.md',
+      'RELEASE_NOTES.md',
       'RELEASE_CANDIDATE_NOTES.md',
+      'CHANGELOG.md',
     ];
 
     const fileChecksums = {};
@@ -167,7 +169,7 @@ export async function verifyReleaseCandidate(options = {}) {
     }
 
     const manifest = {
-      releaseTag: RELEASE_CANDIDATE_TAG,
+      releaseTag: RELEASE_TAG,
       timestamp: new Date().toISOString(),
       git: {
         commit: gitCommit,
@@ -175,7 +177,7 @@ export async function verifyReleaseCandidate(options = {}) {
       },
       verifiedScorecard: scorecard,
       checksums: fileChecksums,
-      status: 'VERIFIED_RELEASE_CANDIDATE',
+      status: 'VERIFIED_GA_RELEASE',
     };
 
     const outDir = path.dirname(MANIFEST_PATH);
@@ -194,7 +196,7 @@ export async function verifyReleaseCandidate(options = {}) {
 
     console.log('\n=============================================================');
     console.log(`✨ ALL 9 RELEASE GATES PASSED! (${elapsedSec}s)`);
-    console.log(`🎉 Open Studio ${RELEASE_CANDIDATE_TAG} is fully verified and ready!`);
+    console.log(`🎉 Open Studio ${RELEASE_TAG} (Production GA) is fully verified and ready!`);
     console.log('=============================================================\n');
 
     return {
@@ -204,7 +206,7 @@ export async function verifyReleaseCandidate(options = {}) {
       elapsedSec,
     };
   } catch (err) {
-    console.error('\n❌ RELEASE CANDIDATE VERIFICATION FAILED:');
+    console.error('\n❌ RELEASE VERIFICATION FAILED:');
     console.error(err.message);
     process.exit(1);
   }
@@ -212,7 +214,7 @@ export async function verifyReleaseCandidate(options = {}) {
 
 // Direct execution
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  verifyReleaseCandidate().catch((err) => {
+  verifyRelease().catch((err) => {
     console.error(err);
     process.exit(1);
   });

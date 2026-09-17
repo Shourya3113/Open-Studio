@@ -91,7 +91,7 @@ export function detectHostPlatform(): 'windows' | 'macos' | 'linux' | 'browser' 
 export function getReleaseMetadata(): ReleaseMetadata {
   return {
     appName: 'Open Studio',
-    version: '0.1.0',
+    version: '1.0.0',
     license: 'Apache-2.0',
     airgapStatus: '100% Offline Air-Gapped Core Enforced',
     telemetryEnforced: false, // strictly zero telemetry

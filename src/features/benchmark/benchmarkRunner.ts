@@ -474,7 +474,7 @@ export async function runFullBenchmarkSuite(
 
   return {
     timestamp: Date.now(),
-    version: '0.1.0',
+    version: '1.0.0',
     overallPassed,
     totalDurationMs,
     categories,

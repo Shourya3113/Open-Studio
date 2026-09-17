@@ -1,6 +1,6 @@
 [package]
 name = "open-studio"
-version = "0.1.0"
+version = "1.0.0"
 description = "Open Studio: 100% Offline, Native Local AI IDE & Agentic Workspace"
 authors = ["Shourya Solanki and Open Studio Contributors"]
 edition = "2021"

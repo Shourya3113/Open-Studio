@@ -11,7 +11,7 @@ describe('Release Metadata & Platform Packaging (Day 55)', () => {
     const meta = getReleaseMetadata();
 
     expect(meta.appName).toBe('Open Studio');
-    expect(meta.version).toBe('0.1.0');
+    expect(meta.version).toBe('1.0.0');
     expect(meta.license).toBe('Apache-2.0');
     expect(meta.airgapStatus).toContain('100% Offline');
     expect(meta.telemetryEnforced).toBe(false); // Zero telemetry strictly enforced

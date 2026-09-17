@@ -101,13 +101,13 @@ mod tests {
             },
             client_info: ClientInfo {
                 name: "Open Studio".to_string(),
-                version: "0.1.0".to_string(),
+                version: "1.0.0".to_string(),
             },
         };
 
         let json = serde_json::to_string(&params).expect("Failed to serialize InitializeParams");
         assert!(json.contains("\"protocolVersion\":\"2024-11-05\""));
-        assert!(json.contains("\"clientInfo\":{\"name\":\"Open Studio\",\"version\":\"0.1.0\"}"));
+        assert!(json.contains("\"clientInfo\":{\"name\":\"Open Studio\",\"version\":\"1.0.0\"}"));
 
         let mock_server_resp = serde_json::json!({
             "protocolVersion": "2024-11-05",

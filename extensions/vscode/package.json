@@ -2,7 +2,7 @@
   "name": "open-studio-vscode",
   "displayName": "Open Studio Local AI",
   "description": "100% Offline, Native Local AI Autocompletion & Frugal Diffs powered by Ollama",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "publisher": "open-studio",
   "engines": {
     "vscode": "^1.80.0"

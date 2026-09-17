@@ -70,7 +70,7 @@ impl McpClient {
             capabilities: ClientCapabilities::default(),
             client_info: ClientInfo {
                 name: "Open Studio".to_string(),
-                version: "0.1.0".to_string(),
+                version: "1.0.0".to_string(),
             },
         };
 
