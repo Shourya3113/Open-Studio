@@ -1,16 +1,11 @@
 import React, { useState } from 'react';
 import { 
   Download, 
-  Terminal, 
   Zap, 
   ShieldCheck, 
   GitBranch, 
   Sliders, 
   Box, 
-  Cpu, 
-  ChevronRight, 
-  Check, 
-  Sparkles,
   Layers,
   ArrowRight
 } from 'lucide-react';

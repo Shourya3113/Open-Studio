@@ -7,14 +7,10 @@ import {
   Terminal, 
   Copy, 
   Check, 
-  Layers, 
-  Cpu, 
   HardDrive,
-  Share2,
-  ExternalLink,
   Sparkles
 } from 'lucide-react';
-import { getModelById, HubModel } from '../data/goldenModels';
+import { getModelById } from '../data/goldenModels';
 
 interface ModelDetailPageProps {
   modelId: string;

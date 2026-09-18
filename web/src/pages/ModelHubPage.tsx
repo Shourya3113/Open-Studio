@@ -1,23 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { 
-  Box, 
   Search, 
-  SlidersHorizontal, 
   Download, 
   CheckCircle, 
-  Zap, 
-  Cpu, 
-  Sparkles, 
   Upload, 
-  HardDrive,
-  ExternalLink,
-  ShieldCheck,
-  Flame
+  ExternalLink
 } from 'lucide-react';
 import { 
-  GOLDEN_MODELS, 
   queryModels, 
-  HubModel, 
   HardwareTierName, 
   ModelRole 
 } from '../data/goldenModels';
@@ -162,7 +152,9 @@ export const ModelHubPage: React.FC<ModelHubPageProps> = ({ navigate }) => {
                       {model.name}
                     </span>
                     {model.verifiedBadge && (
-                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" title="IDE Verified Benchmark" />
+                      <span title="IDE Verified Benchmark" className="inline-flex">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      </span>
                     )}
                   </div>
                   <div className="text-[11px] text-[#858585] mt-0.5">

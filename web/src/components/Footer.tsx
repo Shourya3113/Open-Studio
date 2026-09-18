@@ -1,5 +1,4 @@
 import React from 'react';
-import { Shield, HardDrive, Cpu, Terminal, Sparkles } from 'lucide-react';
 
 export const Footer: React.FC = () => {
   return (

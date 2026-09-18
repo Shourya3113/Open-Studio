@@ -2,11 +2,7 @@ import React, { useState } from 'react';
 import { 
   ArrowLeft, 
   Upload, 
-  FileCode, 
   CheckCircle, 
-  ShieldCheck, 
-  Sparkles, 
-  AlertCircle,
   HardDrive
 } from 'lucide-react';
 import { HardwareTierName, ModelRole } from '../data/goldenModels';
@@ -153,7 +149,7 @@ export const ModelUploadPage: React.FC<ModelUploadPageProps> = ({ navigate }) =>
           <div className="bg-[#1a1a1e] rounded-2xl border border-[#2a2a30] p-6 space-y-4 text-xs">
             <h3 className="font-bold text-white text-sm">Model Manifest Information</h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-1.5">
                 <label className="text-[#858585] font-medium">Model Identifier / Name *</label>
                 <input
@@ -174,6 +170,17 @@ export const ModelUploadPage: React.FC<ModelUploadPageProps> = ({ navigate }) =>
                   value={author}
                   onChange={(e) => setAuthor(e.target.value)}
                   placeholder="e.g. Acme Research Lab"
+                  className="w-full bg-[#121214] border border-[#2a2a30] rounded-lg p-2.5 text-white outline-none focus:border-[#007acc]"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[#858585] font-medium">License</label>
+                <input
+                  type="text"
+                  value={license}
+                  onChange={(e) => setLicense(e.target.value)}
+                  placeholder="e.g. Apache-2.0, MIT, LLaMA-3"
                   className="w-full bg-[#121214] border border-[#2a2a30] rounded-lg p-2.5 text-white outline-none focus:border-[#007acc]"
                 />
               </div>
