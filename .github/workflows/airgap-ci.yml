@@ -66,8 +66,11 @@ jobs:
       - name: Run VS Code Extension Suite
         run: npm run extensions:test
 
-      - name: Production Web Bundle Build
+      - name: Production Desktop Bundle Build
         run: npm run build
+
+      - name: Production Web Platform Build
+        run: npm run web:build
 
   rust-backend-tests:
     name: 🦀 Rust Backend & Native Security Gate
