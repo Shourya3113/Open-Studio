@@ -46,3 +46,14 @@ src-tauri/target/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+
+# Internal Strategy, Blueprints & Execution Plans (Local Only)
+*.pdf
+OPEN_STUDIO_EXECUTION_MASTERPLAN.md
+RECOMMENDATIONS.md
+RELEASE_CANDIDATE_NOTES.md
+build_pdf.py
+generate_icons.py
+bench/
+docs/launch/
+ee/
