@@ -209,6 +209,12 @@ impl InferenceManager {
             .prepare_for_model(&endpoint, &self.client, &req.model)
             .await;
 
+        let keep_alive_json = match req.keep_alive.as_deref() {
+            Some("-1") => serde_json::json!(-1),
+            Some(s) => serde_json::json!(s),
+            None => serde_json::json!("5m"),
+        };
+
         let body = serde_json::json!({
             "model": req.model,
             "prompt": req.prompt,
@@ -217,7 +223,7 @@ impl InferenceManager {
                 "temperature": req.temperature,
                 "stop": req.stop_tokens,
             },
-            "keep_alive": req.keep_alive.unwrap_or_else(|| "5m".to_string())
+            "keep_alive": keep_alive_json
         });
 
         let resp = match self.client.post(&url).json(&body).send().await {

@@ -9,7 +9,7 @@ export interface OllamaGenerateOptions {
   prompt: string;
   temperature?: number;
   stop?: string[];
-  keep_alive?: string;
+  keep_alive?: string | number;
 }
 
 export interface OllamaHealthStatus {
@@ -113,7 +113,10 @@ export function streamOllamaGenerate(
             temperature: options.temperature ?? 0.1,
             stop: options.stop ?? [],
           },
-          keep_alive: options.keep_alive ?? '-1', // Keep model resident in VRAM
+          keep_alive:
+            options.keep_alive === '-1' || options.keep_alive === -1 || options.keep_alive === undefined
+              ? -1
+              : options.keep_alive,
         }),
         signal: controller.signal,
       });

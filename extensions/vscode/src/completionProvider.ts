@@ -108,7 +108,7 @@ export class OpenStudioCompletionProvider implements vscode.InlineCompletionItem
           prompt,
           temperature,
           stop: QWEN_FIM_STOP_TOKENS,
-          keep_alive: '-1', // Resident in VRAM
+          keep_alive: -1, // Resident in VRAM
         },
         (tokenDelta) => {
           prediction += tokenDelta;
