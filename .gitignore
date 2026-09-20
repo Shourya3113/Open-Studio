@@ -23,6 +23,7 @@ node_modules/
 dist/
 build/
 out/
+*.vsix
 .vscode-test/
 .next/
 .cache/
